@@ -23,6 +23,13 @@ export class ConfigValidationError extends SidecarError {
     }
 }
 
+export class InvalidModeError extends ConfigValidationError {
+    constructor(mode: string) {
+        super(`Invalid GENERATION_MODE: "${mode}". Must be one of: all, global, local`);
+        this.name = 'InvalidModeError';
+    }
+}
+
 export class FileWriteError extends SidecarError {
     constructor(
         message: string,

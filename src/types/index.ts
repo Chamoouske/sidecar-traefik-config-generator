@@ -11,6 +11,7 @@ export type {
 } from './docker.js';
 
 export type {
+    GenerationMode,
     AppConfig,
     LabelConfig,
     EnvVars,
@@ -36,6 +37,7 @@ export {
     SidecarError,
     DockerConnectionError,
     ConfigValidationError,
+    InvalidModeError,
     FileWriteError,
     DiscoveryError,
 } from './errors.js';

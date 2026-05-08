@@ -1,7 +1,8 @@
 # 🏗️ Sidecar Traefik Federation — Documento de Arquitetura
 
-> **Versão:** 2.0.0 (alinhada com a implementação real)
+> **Versão:** 2.1.0 (mode-aware — suporte a `GENERATION_MODE=all|global|local`)
 > **Propósito:** Sidecar que gera configuração dinâmica do Traefik para federação multi-nó em Docker Swarm
+> **Última atualização:** 2026-05-08
 
 ---
 
@@ -25,46 +26,53 @@
 ## 1. Diagrama de Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            DOCKER SWARM CLUSTER                            │
-│                                                                             │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                  │
-│  │   Node 1     │    │   Node 2     │    │   Node 3     │                  │
-│  │  (Manager)   │    │  (Worker)    │    │  (Worker)    │                  │
-│  │              │    │              │    │              │                  │
-│  │ ┌──────────┐ │    │ ┌──────────┐ │    │ ┌──────────┐ │                  │
-│  │ │ Traefik  │ │    │ │ Traefik  │ │    │ │ Traefik  │ │                  │
-│  │ │ (Global) │ │    │ │ (Global) │ │    │ │ (Global) │ │                  │
-│  │ └────┬─────┘ │    │ └────┬─────┘ │    │ └────┬─────┘ │                  │
-│  │      │       │    │      │       │    │      │       │                  │
-│  │ ┌────▼─────┐ │    │ ┌────▼─────┐ │    │ ┌────▼─────┐ │                  │
-│  │ │ Sidecar  │ │    │ │ Sidecar  │ │    │ │ Sidecar  │ │                  │
-│  │ │ (gnt)    │ │    │ │ (gnt)    │ │    │ │ (gnt)    │ │                  │
-│  │ └────┬─────┘ │    │ └────┬─────┘ │    │ └────┬─────┘ │                  │
-│  │      │       │    │      │       │    │      │       │                  │
-│  │ ┌────▼─────┐ │    │ ┌────▼─────┐ │    │ ┌────▼─────┐ │                  │
-│  │ │Syncthing │◄├────┼─┤Syncthing │◄├────┼─┤Syncthing │ │                  │
-│  │ └──────────┘ │    │ └──────────┘ │    │ └──────────┘ │                  │
-│  └──────────────┘    └──────────────┘    └──────────────┘                  │
-│         ▲                    ▲                    ▲                         │
-│         │                    │                    │                         │
-│         │         ┌──────────┴──────────┐        │                         │
-│         │         │  Volume Compartilhado │        │                         │
-│         │         │  (Syncthing)         │        │                         │
-│         │         │  /data/shared/      │        │                         │
-│         │         └─────────────────────┘        │                         │
-│         │                                        │                         │
-│         └──────────────────┬─────────────────────┘                         │
-│                            │                                                │
-│               ┌────────────▼────────────┐                                   │
-│               │  External Request       │                                   │
-│               │  → Global Router        │                                   │
-│               │  → Federated Service    │                                   │
-│               │  → Remote Traefik       │                                   │
-│               │  → Local Router         │                                   │
-│               │  → Local Container      │                                   │
-│               └─────────────────────────┘                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            DOCKER SWARM CLUSTER                                │
+│                                                                                 │
+│  ┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────┐  │
+│  │   Node 1 (Manager)   │    │   Node 2 (Worker)    │    │   Node 3 (Worker)│  │
+│  │   GENERATION_MODE    │    │   GENERATION_MODE    │    │   GENERATION_MODE│  │
+│  │   = global           │    │   = local            │    │   = local        │  │
+│  │                      │    │                      │    │                  │  │
+│  │ ┌──────────────────┐ │    │ ┌──────────────────┐ │    │ ┌──────────────┐ │  │
+│  │ │ SwarmDiscovery   │ │    │ │ LocalDiscovery   │ │    │ │LocalDiscovery│ │  │
+│  │ │ Service          │ │    │ │ Service          │ │    │ │ Service      │ │  │
+│  │ │ (API Swarm)      │ │    │ │ (listContainers) │ │    │ │(listContain) │ │  │
+│  │ └───────┬──────────┘ │    │ └───────┬──────────┘ │    │ └──────┬───────┘ │  │
+│  │         │            │    │         │            │    │         │         │  │
+│  │ ┌───────▼──────────┐ │    │ ┌───────▼──────────┐ │    │ ┌───────▼───────┐ │  │
+│  │ │ GlobalOrchestrator│ │    │ │ LocalOrchestrator│ │    │ │LocalOrchestra│ │  │
+│  │ │ Federacao + Mw   │ │    │ │ Rotas node-spc   │ │    │ │Rotas node-spc│ │  │
+│  │ └───────┬──────────┘ │    │ └───────┬──────────┘ │    │ └───────┬───────┘ │  │
+│  │         │            │    │         │            │    │         │         │  │
+│  │ ┌───────▼──────────┐ │    │ ┌───────▼──────────┐ │    │ ┌───────▼───────┐ │  │
+│  │ │  /data/shared/   │ │    │ │  /data/local/    │ │    │ │  /data/local/ │ │  │
+│  │ │  federacao       │ │    │ │  generated/      │ │    │ │  generated/   │ │  │
+│  │ │  middlewares     │ │    │ │                  │ │    │ │               │ │  │
+│  │ └────────┬─────────┘ │    │ └──────────────────┘ │    │ └───────────────┘ │  │
+│  │          │           │    │                      │    │                   │  │
+│  │ ┌────────▼─────────┐ │    │                      │    │                   │  │
+│  │ │    Syncthing     │◄├────┼──────────────────────┼────┼───────────────────┘  │
+│  │ └──────────────────┘ │    │                      │    │                      │
+│  └──────────────────────┘    └──────────────────────┘    └──────────────────────┘
+│         ▲                                                                      │
+│         │                                                                      │
+│         │         ┌─────────────────────────────┐                             │
+│         │         │  Volume Compartilhado        │                             │
+│         │         │  (Syncthing)                 │                             │
+│         │         │  /data/shared/               │                             │
+│         │         └─────────────────────────────┘                             │
+│         │                                                                      │
+│         └──────────────────┬──────────────────────────────────────────────────┘
+│                            │
+│               ┌────────────▼────────────────────┐
+│               │  External Request Flow          │
+│               │  1. DNS → qualquer nó           │
+│               │  2. Traefik local → router fed  │
+│               │  3. LB → servidores ponderados  │
+│               │  4. Traefik remoto → container  │
+│               └─────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Fluxo de Requisição
@@ -113,25 +121,26 @@ External Request
 
 ```
 src/
-├── index.ts                          # Bootstrap manual DI + entrypoint
+├── index.ts                          # Bootstrap mode-aware DI + entrypoint
 │
 ├── config/
-│   └── index.ts                      # AppConfigService: load + validação de env vars
+│   └── index.ts                      # AppConfigService: load + validação de env vars (GENERATION_MODE)
 │
 ├── core/
 │   └── interfaces/
 │       ├── index.ts                  # Barrel export
 │       ├── IConfig.ts                # Interface de configuração
-│       ├── IConfigGenerator.ts       # Interface de geração (não implementada atualmente)
 │       ├── IDockerClient.ts          # Abstração da API Docker
 │       ├── IEventEmitter.ts          # Eventos internos
 │       ├── IFederationStrategy.ts    # Estratégia de federação
 │       ├── IFileWriter.ts            # Escrita de arquivos
-│       ├── ILabelParser.ts           # Parsing de labels
+│       ├── ILabelParser.ts           # Parsing de labels federation.*
+│       ├── ILocalConfigGenerator.ts  # Geração de config local
+│       ├── ILocalDiscoveryService.ts # NOVO - Descoberta local (não Swarm)
 │       ├── ILogger.ts                # Logging
 │       ├── IMiddlewareGenerator.ts   # Geração de middlewares
 │       ├── IServiceLocality.ts       # Localidade de serviço
-│       └── ISwarmDiscovery.ts        # Descoberta de serviços
+│       └── ISwarmDiscovery.ts        # Descoberta de serviços Swarm
 │
 ├── docker/
 │   └── DockerClient.ts               # DockerClientService: Dockerode wrapper
@@ -147,35 +156,45 @@ src/
 ├── logger/
 │   └── index.ts                      # PinoLogger implementation
 │
+├── orchestration/                    # NOVA!
+│   ├── index.ts                      # Barrel export
+│   ├── GlobalOrchestratorService.ts  # NOVO - Orquestrador de configs compartilhadas
+│   ├── LocalOrchestratorService.ts   # NOVO - Orquestrador de configs node-specific
+│   └── ModeOrchestratorService.ts    # NOVO - Fachada mode-aware (all/global/local)
+│
 ├── services/
-│   ├── ConfigOrchestratorService.ts   # Orquestrador principal do ciclo de geração
+│   ├── ConfigOrchestratorService.ts   # NÃO usado no bootstrap (mantido p/ referência)
 │   ├── EventEmitterService.ts         # Event emitter interno
 │   ├── LabelParserService.ts          # Parse de labels federation.*
-│   ├── ServiceLocalityService.ts      # Detecção de localidade (nó atual vs remoto)
-│   └── SwarmDiscoveryService.ts       # Descoberta de serviços Swarm
+│   ├── LocalDiscoveryService.ts       # NOVO - Descoberta local via APIs Swarm
+│   ├── ServiceLocalityService.ts      # Detecção de localidade
+│   └── SwarmDiscoveryService.ts       # Descoberta de serviços Swarm (implementa ILocalDiscoveryService)
 │
 ├── types/
 │   ├── index.ts                      # Barrel export
-│   ├── config.ts                     # AppConfig, LabelConfig, EnvVars
+│   ├── config.ts                     # AppConfig, LabelConfig, EnvVars + GenerationMode
 │   ├── docker.ts                     # SwarmNode, SwarmTask, SwarmService, etc.
-│   ├── errors.ts                     # Hierarquia de erros (SidecarError + subclasses)
+│   ├── errors.ts                     # Hierarquia de erros + InvalidModeError
 │   └── federation.ts                 # ServerDefinition, LoadBalancerConfig, outputs
 │
 └── utils/
     ├── index.ts                      # Barrel export
     └── retry.ts                      # retryWithBackoff: exponential backoff genérico
 
-src/__tests__/                         # Testes unitários (Vitest)
-├── AppConfigService.test.ts           # ~20 testes: defaults, env vars, validação
-├── ConfigOrchestrator.test.ts         # ~17 testes: ciclo, cleanup, erros
+src/__tests__/                         # Testes unitários (Vitest) - 14 arquivos
+├── AppConfigService.test.ts           # ~26 testes: defaults + GENERATION_MODE
 ├── DockerClient.test.ts               # ~18 testes: connect, retry, mapeamento
 ├── FederationGenerator.test.ts        # ~20 testes: todas as opções combinadas
 ├── FileWriterService.test.ts          # ~17 testes: atomicidade, skip, erros
+├── GlobalOrchestrator.test.ts         # NOVO - 8 testes: ciclo global, cleanup
 ├── LabelParserService.test.ts         # ~14 testes: incluindo valores de borda
+├── LocalDiscoveryService.test.ts      # NOVO - 10 testes: descoberta local
 ├── LocalGenerator.test.ts             # ~20 testes: local/remoto, health check
+├── LocalOrchestrator.test.ts          # NOVO - 8 testes: ciclo local, cleanup
 ├── MiddlewareGenerator.test.ts        # ~13 testes: retry, circuit breaker
+├── ModeOrchestrator.test.ts           # NOVO - 8 testes: decisão de mode
 ├── ServiceLocalityService.test.ts     # ~16 testes: pesos, fallback de porta
-├── SwarmDiscoveryService.test.ts      # ~11 testes: descoberta, erros de nodo
+├── SwarmDiscoveryService.test.ts      # ~9 testes: descoberta, erros de nodo
 └── types.test.ts                      # ~15 testes: erros, interfaces de output
 ```
 
@@ -189,42 +208,40 @@ src/__tests__/                         # Testes unitários (Vitest)
 export interface SwarmNode {
     id: string;
     hostname: string;
-    addr: string;
-    role: string;
+    ip: string;
     availability: string;
-    state: string;
-    labels: Record<string, string>;
+    status: string;
 }
 
 export interface SwarmTask {
     id: string;
-    serviceId: string;
     nodeId: string;
-    state: string;
-    image: string;
-    slot?: number;
+    serviceId: string;
+    status: string;
+    desiredState: string;
+    slot: number;
 }
 
 export interface SwarmService {
     id: string;
     name: string;
+    labels: Record<string, string>;
+    ports?: Array<{ published: number; target: number }>;
     image: string;
     replicas: number;
-    ports: Array<{ published: number; target: number }>;
-    labels: Record<string, string>;
-    updatedAt?: string;
 }
 
 export interface ServiceEndpoint {
     nodeId: string;
-    hostname: string;
-    addr: string;
-    port: number;
+    nodeHostname: string;
+    nodeIp: string;
+    taskStatus: string;
+    taskId: string;
 }
 
 export interface DiscoveredService {
-    name: string;
-    image: string;
+    serviceName: string;
+    serviceId: string;
     labels: Record<string, string>;
     endpoints: ServiceEndpoint[];
 }
@@ -233,40 +250,42 @@ export interface DiscoveredService {
 ### [`src/types/config.ts`](src/types/config.ts)
 
 ```typescript
+export type GenerationMode = 'all' | 'global' | 'local';
+
 export interface AppConfig {
+    mode: GenerationMode;
     node: {
+        hostname: string;
+        ip: string;
         nodeId: string;
     };
     docker: {
-        socketPath: string;
-        connectionRetryAttempts: number;
-        connectionRetryBaseDelayMs: number;
-        connectionRetryMaxDelayMs: number;
+        socket: string;
+        pollIntervalMs: number;
     };
     directories: {
-        federation: string;
+        shared: string;
         local: string;
+        federation: string;
         middlewares: string;
+        localGenerated: string;
     };
     federation: {
-        labelPrefix: string;
-        localWeight: number;
-        remoteWeight: number;
-        healthCheckPath: string;
-        healthCheckInterval: string;
-        retryAttempts: number;
-        retryInterval: string;
+        headerName: string;
+        headerValue: string;
+        defaultHealthCheckPath: string;
+        defaultHealthCheckInterval: string;
+        defaultRetryAttempts: number;
+        defaultRetryInterval: string;
         circuitBreakerThreshold: number;
-        stickySessionCookieName: string;
     };
     server: {
         port: number;
-        host: string;
-        pollIntervalMs: number;
+        healthEndpoint: string;
     };
     logging: {
         level: string;
-        prettyPrint: boolean;
+        pretty: boolean;
     };
 }
 
@@ -284,28 +303,23 @@ export interface LabelConfig {
 }
 
 export interface EnvVars {
+    GENERATION_MODE?: string;
+    NODE_HOSTNAME?: string;
+    NODE_IP?: string;
     NODE_ID?: string;
     DOCKER_SOCKET?: string;
-    DOCKER_CONNECTION_RETRY_ATTEMPTS?: string;
-    DOCKER_CONNECTION_RETRY_BASE_DELAY_MS?: string;
-    DOCKER_CONNECTION_RETRY_MAX_DELAY_MS?: string;
-    FEDERATION_OUTPUT_DIR?: string;
-    LOCAL_OUTPUT_DIR?: string;
-    MIDDLEWARE_OUTPUT_DIR?: string;
-    FEDERATION_LABEL_PREFIX?: string;
-    FEDERATION_LOCAL_WEIGHT?: string;
-    FEDERATION_REMOTE_WEIGHT?: string;
-    FEDERATION_HEALTH_CHECK_PATH?: string;
-    FEDERATION_HEALTH_CHECK_INTERVAL?: string;
-    FEDERATION_RETRY_ATTEMPTS?: string;
-    FEDERATION_RETRY_INTERVAL?: string;
-    FEDERATION_CIRCUIT_BREAKER_THRESHOLD?: string;
-    FEDERATION_STICKY_SESSION_COOKIE_NAME?: string;
+    POLL_INTERVAL_MS?: string;
+    SHARED_DIR?: string;
+    LOCAL_DIR?: string;
     SERVER_PORT?: string;
-    SERVER_HOST?: string;
-    SERVER_POLL_INTERVAL_MS?: string;
+    HEALTH_ENDPOINT?: string;
     LOG_LEVEL?: string;
-    LOG_PRETTY_PRINT?: string;
+    LOG_PRETTY?: string;
+    FEDERATION_HEADER_NAME?: string;
+    FEDERATION_HEADER_VALUE?: string;
+    CIRCUIT_BREAKER_THRESHOLD?: string;
+    DEFAULT_RETRY_ATTEMPTS?: string;
+    DEFAULT_RETRY_INTERVAL?: string;
 }
 ```
 
@@ -415,21 +429,22 @@ Todas as interfaces estão em [`src/core/interfaces/`](src/core/interfaces/) e s
 |---|---|---|
 | [`IConfig`](src/core/interfaces/IConfig.ts) | Carregamento e validação de config | [`AppConfigService`](src/config/index.ts) |
 | [`IDockerClient`](src/core/interfaces/IDockerClient.ts) | Comunicação com API Docker | [`DockerClientService`](src/docker/DockerClient.ts) |
-| [`ISwarmDiscovery`](src/core/interfaces/ISwarmDiscovery.ts) | Descoberta de serviços Swarm | [`SwarmDiscoveryService`](src/services/SwarmDiscoveryService.ts) |
+| [`ISwarmDiscovery`](src/core/interfaces/ISwarmDiscovery.ts) | Descoberta de serviços Swarm (manager) | [`SwarmDiscoveryService`](src/services/SwarmDiscoveryService.ts) |
+| [`ILocalDiscoveryService`](src/core/interfaces/ILocalDiscoveryService.ts) | Descoberta de containers locais (worker) | [`LocalDiscoveryService`](src/services/LocalDiscoveryService.ts) |
 | [`ILabelParser`](src/core/interfaces/ILabelParser.ts) | Parse de labels `federation.*` | [`LabelParserService`](src/services/LabelParserService.ts) |
-| [`IFederationStrategy`](src/core/interfaces/IFederationStrategy.ts) | Estratégia de geração de config | [`FederationConfigGeneratorService`](src/generators/FederationConfigGeneratorService.ts) |
+| [`IFederationStrategy`](src/core/interfaces/IFederationStrategy.ts) | Geração de config de federação | [`FederationConfigGeneratorService`](src/generators/FederationConfigGeneratorService.ts) |
 | [`IMiddlewareGenerator`](src/core/interfaces/IMiddlewareGenerator.ts) | Geração de middlewares | [`MiddlewareConfigGeneratorService`](src/generators/MiddlewareConfigGeneratorService.ts) |
+| [`ILocalConfigGenerator`](src/core/interfaces/ILocalConfigGenerator.ts) | Geração de config local (rotas node-specific) | [`LocalConfigGeneratorService`](src/generators/LocalConfigGeneratorService.ts) |
 | [`IFileWriter`](src/core/interfaces/IFileWriter.ts) | Escrita atômica de arquivos | [`FileWriterService`](src/filesystem/FileWriterService.ts) |
 | [`IServiceLocality`](src/core/interfaces/IServiceLocality.ts) | Detecção de localidade | [`ServiceLocalityService`](src/services/ServiceLocalityService.ts) |
 | [`IEventEmitter`](src/core/interfaces/IEventEmitter.ts) | Event emitter interno | [`EventEmitterService`](src/services/EventEmitterService.ts) |
 | [`ILogger`](src/core/interfaces/ILogger.ts) | Logging estruturado | [`PinoLogger`](src/logger/index.ts) |
-| [`IConfigGenerator`](src/core/interfaces/IConfigGenerator.ts) | (não implementada — interface órfã) | — |
 
 ---
 
 ## 5. Bootstrap e Injeção de Dependência
 
-O sistema usa **injeção de dependência manual** (sem container) diretamente no [`src/index.ts`](src/index.ts). O bootstrap segue estas etapas:
+O sistema usa **injeção de dependência manual** (sem container) diretamente no [`src/index.ts`](src/index.ts). A arquitetura mode-aware bifurca o bootstrap conforme o `GENERATION_MODE`:
 
 ```mermaid
 flowchart TD
@@ -443,36 +458,74 @@ flowchart TD
     D --> H["ServiceLocalityService"]
     D --> I["EventEmitterService"]
     E --> J["SwarmDiscoveryService"]
+    E --> J2["LocalDiscoveryService"]
     J --> K["FederationConfigGeneratorService"]
     K --> L["LocalConfigGeneratorService"]
     K --> M["MiddlewareConfigGeneratorService"]
-    J --> N["ConfigOrchestratorService"]
-    K --> N
-    L --> N
-    M --> N
-    G --> N
-    N --> O["setInterval - ciclo de polling"]
-    N --> P["Health Server - GET /health"]
-    N --> Q["Graceful Shutdown - SIGTERM/SIGINT"]
+
+    J --> R{"hasGlobalMode?"}
+    J2 --> S{"hasLocalMode?"}
+
+    R -->|sim| T["GlobalOrchestratorService"]
+    S -->|sim| U["LocalOrchestratorService"]
+
+    T --> V["ModeOrchestratorService"]
+    U --> V
+
+    K --> T
+    M --> T
+    G --> T
+
+    L --> U
+    G --> U
+
+    V --> W["setInterval - ciclo de polling"]
+    V --> X["Health Server - GET /health"]
+    V --> Y["Graceful Shutdown - SIGTERM/SIGINT"]
 ```
 
-As dependências são injetadas via construtor — cada classe recebe suas dependências como parâmetros tipados:
+As dependências são injetadas via construtor. O bootstrap atual em [`src/index.ts`](src/index.ts) é mode-aware:
 
 ```typescript
-// Exemplo do wiring em src/index.ts
+// Bootstrap mode-aware (src/index.ts - simplificado)
+const { mode } = config;
+const hasGlobalMode = mode === 'all' || mode === 'global';
+const hasLocalMode = mode === 'all' || mode === 'local';
+
 const dockerClient = new DockerClientService(config, logger);
 await dockerClient.connect();
 const labelParser = new LabelParserService();
 const fileWriter = new FileWriterService(config, logger);
 const serviceLocality = new ServiceLocalityService(config);
 const eventEmitter = new EventEmitterService();
-const discovery = new SwarmDiscoveryService(dockerClient, labelParser, logger);
-const federationGenerator = new FederationConfigGeneratorService(serviceLocality, labelParser, logger);
-const localGenerator = new LocalConfigGeneratorService(serviceLocality, labelParser, config, logger);
-const middlewareGenerator = new MiddlewareConfigGeneratorService(labelParser, logger);
-const orchestrator = new ConfigOrchestratorService(
-    discovery, federationGenerator, localGenerator,
-    middlewareGenerator, fileWriter, config, logger
+
+let globalOrchestrator: GlobalOrchestratorService | undefined;
+let localOrchestrator: LocalOrchestratorService | undefined;
+
+if (hasGlobalMode) {
+    const discovery = new SwarmDiscoveryService(dockerClient, labelParser, logger);
+    const federationGenerator = new FederationConfigGeneratorService(
+        serviceLocality, labelParser, logger,
+    );
+    const middlewareGenerator = new MiddlewareConfigGeneratorService(labelParser, logger);
+    globalOrchestrator = new GlobalOrchestratorService(
+        discovery, federationGenerator, middlewareGenerator,
+        fileWriter, config, logger,
+    );
+}
+
+if (hasLocalMode) {
+    const localDiscovery = new LocalDiscoveryService(dockerClient, labelParser, config, logger);
+    const localGenerator = new LocalConfigGeneratorService(
+        serviceLocality, labelParser, config, logger,
+    );
+    localOrchestrator = new LocalOrchestratorService(
+        localDiscovery, localGenerator, fileWriter, config, logger,
+    );
+}
+
+const orchestrator = new ModeOrchestratorService(
+    mode, logger, globalOrchestrator, localOrchestrator,
 );
 ```
 
@@ -480,15 +533,16 @@ const orchestrator = new ConfigOrchestratorService(
 
 ## 6. Data Flow
 
-### Fluxo de Inicialização
+### Fluxo de Inicialização (mode-aware)
 
 ```
 main()
   │
   ├─► Carregar Config (AppConfigService.load)
-  │     └─► process.env → AppConfig tipado com defaults
+  │     └─► process.env + GENERATION_MODE → AppConfig tipado com defaults
   │
   ├─► Validar Config (AppConfigService.validate)
+  │     ├─► GENERATION_MODE: 'all' | 'global' | 'local' (senão InvalidModeError)
   │     ├─► pollInterval >= 1000ms
   │     ├─► port 1-65535
   │     ├─► circuitBreakerThreshold 0-1
@@ -500,52 +554,84 @@ main()
   ├─► Conectar Docker Client (DockerClientService.connect)
   │     └─► Retry exponencial: 1s→2s→4s→8s→16s (5 tentativas)
   │
-  ├─► Garantir Diretórios (ensureDirectories)
-  │     └─► /data/shared/federation/
-  │         /data/shared/middlewares/
-  │         /data/local/generated/
+  ├─► Garantir Diretórios (conditional por modo)
+  │     ├─► GENERATION_MODE=all ou global → /data/shared/federation/ + /data/shared/middlewares/
+  │     ├─► GENERATION_MODE=local → /data/local/generated/
+  │     └─► GENERATION_MODE=all → ambos
+  │
+  ├─► Inicializar Serviços por Modo
+  │     ├─► global: SwarmDiscoveryService → GlobalOrchestratorService
+  │     └─► local: LocalDiscoveryService → LocalOrchestratorService
+  │
+  ├─► Iniciar ModeOrchestratorService (facade)
+  │     ├─► all → executa ambos: global + local
+  │     ├─► global → executa apenas GlobalOrchestrator
+  │     └─► local → executa apenas LocalOrchestrator
   │
   ├─► Iniciar Servidor Health Check
-  │     └─► GET /health → { status, uptime, version, services }
+  │     └─► GET /health → { status, uptime, version, mode, services }
   │
   └─► Iniciar Ciclo de Polling
-        └─► ConfigOrchestratorService.runGenerationCycle()
+        └─► ModeOrchestratorService.runGenerationCycle()
               └─► a cada pollIntervalMs
 ```
 
 ### Fluxo do Ciclo de Geração
 
 ```mermaid
-flowchart LR
-    A["runGenerationCycle()"] --> B["discoverAllServices()"]
-    B --> C["Para cada serviço federado"]
-    C --> D["generateForService()"]
-    D --> E["FederationConfigGeneratorService.generate()"]
-    D --> F["MiddlewareConfigGeneratorService.generate()"]
-    D --> G["LocalConfigGeneratorService.generate()"]
-    E --> H["FileWriterService.writeYaml - federation/"]
-    F --> I["FileWriterService.writeYaml - middlewares/"]
-    G --> J["FileWriterService.writeYaml - local/"]
-    C --> K["cleanupStaleFiles()"]
-    K --> L["Remove arquivos de serviços que não existem mais"]
+flowchart TD
+    subgraph ModeOrchestrator
+        A["ModeOrchestratorService.runGenerationCycle()"]
+        A --> B{"mode"}
+    end
+
+    B -->|"all"| C1["GlobalOrchestratorService.run()"]
+    B -->|"all"| C2["LocalOrchestratorService.run()"]
+    B -->|"global"| C1
+    B -->|"local"| C2
+
+    subgraph GlobalOrchestrator
+        C1 --> D1["SwarmDiscoveryService.discoverGlobalServices()"]
+        D1 --> E1["Para cada servico federado"]
+        E1 --> F1["FederationConfigGenerator.generate()"]
+        E1 --> G1["MiddlewareConfigGenerator.generate()"]
+        F1 --> H1["FileWriter.writeYaml - federation/"]
+        G1 --> I1["FileWriter.writeYaml - middlewares/"]
+        E1 --> J1["cleanupStaleFiles() em federation/ + middlewares/"]
+    end
+
+    subgraph LocalOrchestrator
+        C2 --> D2["LocalDiscoveryService.discoverLocalServices()"]
+        D2 --> E2["Para cada servico local"]
+        E2 --> F2["LocalConfigGeneratorService.generate()"]
+        F2 --> H2["FileWriter.writeYaml - local/generated/"]
+        E2 --> J2["cleanupStaleFiles() em local/generated/"]
+    end
 ```
 
-### Etapas do `generateForService`:
+### Etapas do Ciclo de Geração por Modo
 
-1. **FederationConfigGenerator**: Gera [`FederationConfigOutput`](src/types/federation.ts:54) com:
+#### Modo `global` (ou `all` — parte global)
+
+1. **SwarmDiscoveryService.discoverGlobalServices()**: Descobre serviços via API Swarm (`getServices` + `getServiceTasks`), filtra por labels `federation.*`.
+2. **FederationConfigGenerator**: Gera [`FederationConfigOutput`](src/types/federation.ts:54) com:
    - Servidores ponderados (local weight=10, remote weight=1)
    - Health check (se configurado)
    - Sticky session (se `federation.sticky=true`)
    - Circuit breaker (se `federation.circuitBreaker=true`, expression hardcoded)
-
-2. **MiddlewareConfigGenerator**: Gera [`MiddlewareConfigOutput`](src/types/federation.ts:67) com:
+3. **MiddlewareConfigGenerator**: Gera [`MiddlewareConfigOutput`](src/types/federation.ts:67) com:
    - Retry middleware (se `retryAttempts > 0`)
    - Circuit breaker middleware (se `circuitBreaker=true`)
+4. **Cleanup**: Remove arquivos órfãos em `federation/` e `middlewares/`.
 
-3. **LocalConfigGenerator**: Gera [`LocalConfigOutput`](src/types/federation.ts:60) com:
+#### Modo `local` (ou `all` — parte local)
+
+1. **LocalDiscoveryService.discoverLocalServices()**: Descobre serviços rodando no nó atual via `listContainers()`, filtra por labels `federation.*`.
+2. **LocalConfigGenerator**: Gera [`LocalConfigOutput`](src/types/federation.ts:60) com:
    - Service apontando para Docker DNS interno (`<serviceName>:<port>`)
    - Router com regra `Host + X-Federated header` (previne loop)
    - Middlewares de retry/circuit breaker (se configurados)
+3. **Cleanup**: Remove arquivos órfãos em `local/generated/` apenas.
 
 ---
 
@@ -699,28 +785,23 @@ logger.child({ context: 'ConfigOrchestrator' }).info('Ciclo iniciado');
 
 | Variável | Default | Descrição |
 |---|---|---|
-| `NODE_ID` | — | ID do nó atual (obrigatório para locality) |
+| `GENERATION_MODE` | `all` | Modo de geração: `all` ou `global` ou `local` |
+| `NODE_ID` | `unknown` | ID do nó atual no Swarm |
+| `NODE_HOSTNAME` | `os.hostname()` | Hostname do nó |
+| `NODE_IP` | `127.0.0.1` | IP do nó |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Caminho do socket Docker |
-| `DOCKER_CONNECTION_RETRY_ATTEMPTS` | `5` | Tentativas de conexão inicial |
-| `DOCKER_CONNECTION_RETRY_BASE_DELAY_MS` | `1000` | Delay inicial do backoff (ms) |
-| `DOCKER_CONNECTION_RETRY_MAX_DELAY_MS` | `16000` | Delay máximo do backoff (ms) |
-| `FEDERATION_OUTPUT_DIR` | `/data/shared/federation` | Diretório de saída federação |
-| `LOCAL_OUTPUT_DIR` | `/data/local/generated` | Diretório de saída local |
-| `MIDDLEWARE_OUTPUT_DIR` | `/data/shared/middlewares` | Diretório de saída middlewares |
-| `FEDERATION_LABEL_PREFIX` | `federation` | Prefixo das labels |
-| `FEDERATION_LOCAL_WEIGHT` | `10` | Peso do servidor local |
-| `FEDERATION_REMOTE_WEIGHT` | `1` | Peso do servidor remoto |
-| `FEDERATION_HEALTH_CHECK_PATH` | `/` | Path padrão do health check |
-| `FEDERATION_HEALTH_CHECK_INTERVAL` | `10s` | Intervalo do health check |
-| `FEDERATION_RETRY_ATTEMPTS` | `3` | Tentativas de retry |
-| `FEDERATION_RETRY_INTERVAL` | `100ms` | Intervalo do retry |
-| `FEDERATION_CIRCUIT_BREAKER_THRESHOLD` | `0.30` | Threshold do circuit breaker (⚠️ não aplicado) |
-| `FEDERATION_STICKY_SESSION_COOKIE_NAME` | `auto` | Nome do cookie (gerado do service name) |
+| `POLL_INTERVAL_MS` | `30000` | Intervalo entre ciclos de polling (ms) |
+| `SHARED_DIR` | `/data/shared` | Diretório base compartilhado (federação + middlewares) |
+| `LOCAL_DIR` | `/data/local` | Diretório base local (config node-specific) |
 | `SERVER_PORT` | `9090` | Porta do health server |
-| `SERVER_HOST` | `0.0.0.0` | Host do health server |
-| `SERVER_POLL_INTERVAL_MS` | `10000` | Intervalo entre ciclos (ms) |
+| `HEALTH_ENDPOINT` | `/health` | Path do endpoint de health check |
 | `LOG_LEVEL` | `info` | Nível de log |
-| `LOG_PRETTY_PRINT` | `false` | Pretty-print no log |
+| `LOG_PRETTY` | `false` | Pretty-print no log |
+| `FEDERATION_HEADER_NAME` | `X-Federated` | Nome do header de federação |
+| `FEDERATION_HEADER_VALUE` | `true` | Valor do header de federação |
+| `CIRCUIT_BREAKER_THRESHOLD` | `0.30` | Threshold do circuit breaker |
+| `DEFAULT_RETRY_ATTEMPTS` | `3` | Tentativas de retry |
+| `DEFAULT_RETRY_INTERVAL` | `100ms` | Intervalo do retry |
 
 ### Labels Docker (por serviço)
 
@@ -743,7 +824,7 @@ logger.child({ context: 'ConfigOrchestrator' }).info('Ciclo iniciado');
 
 ### Framework
 
-**Vitest** — 11 arquivos de teste, ~152 testes unitários.
+**Vitest** — 14 arquivos de teste, ~202 testes unitários.
 
 ### Organização
 
@@ -759,19 +840,22 @@ Testes unitários em [`src/__tests__/`](src/__tests__/), um arquivo por módulo.
 
 | Módulo | Testes | Cobertura |
 |---|---|---|
-| AppConfigService | ~20 | ✅ Defaults, env vars, validação de borda (NaN, 0, negativos) |
-| ConfigOrchestrator | ~17 | ✅ Ciclo completo, cleanup, erros |
+| AppConfigService | ~26 | ✅ Defaults, env vars, GENERATION_MODE, validação de borda |
+| GlobalOrchestrator | ~8 | ✅ Ciclo global, cleanup dual-dir, ENOENT, error handling |
+| LocalOrchestrator | ~8 | ✅ Ciclo local, null config skip, stale cleanup, error handling |
+| ModeOrchestrator | ~8 | ✅ Modos all/global/local, orchestrator faltante, erro duplo |
 | DockerClient | ~18 | ✅ Connect, disconnect, retry, mapeamento, reconexão |
 | FederationGenerator | ~20 | ✅ canHandle, todas as opções combinadas, weighted servers |
 | FileWriterService | ~17 | ✅ Atomicidade, skip se inalterado, criação de diretórios, erros |
 | LabelParserService | ~14 | ✅ Valores de borda (porta 0, 65536), defaults, null cases |
+| LocalDiscoveryService | ~10 | ✅ Descoberta local, filtro remoto, partial errors, currentNodeId |
 | LocalGenerator | ~20 | ✅ Local vs remoto, Docker DNS, router header, middlewares |
 | MiddlewareGenerator | ~13 | ✅ Retry, circuit breaker, combinado, null cases |
 | ServiceLocalityService | ~16 | ✅ isLocal, pesos, fallback de porta 80 |
-| SwarmDiscoveryService | ~11 | ✅ Descoberta, filtro, erros de nodo, local services |
+| SwarmDiscoveryService | ~9 | ✅ Descoberta, filtro, erros de nodo, local services |
 | Types | ~15 | ✅ Hierarquia de erros, interfaces de output |
 
-### Testando um Serviço Federado (exemplo de mock)
+### Exemplo de Mock (Modo Global)
 
 ```typescript
 const mockService: DiscoveredService = {
@@ -814,6 +898,6 @@ const mockService: DiscoveredService = {
 
 ---
 
-> **Documento de Arquitetura v2.0.0** — Sidecar Traefik Federation  
-> Atualizado em: 2026-05-08  
-> Alinhado com a implementação real em [`src/`](src/)
+> **Documento de Arquitetura v2.1.0** — Sidecar Traefik Federation (mode-aware)
+> Atualizado em: 2026-05-08
+> Alinhado com a implementação real em [`src/`](src/) — suporte a `GENERATION_MODE=all|global|local`

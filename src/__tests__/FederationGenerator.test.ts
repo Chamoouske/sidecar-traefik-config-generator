@@ -17,6 +17,7 @@ const mockLogger: ILogger = {
 
 function createConfig(): AppConfig {
   return {
+    mode: 'all',
     node: { hostname: 'node1', ip: '192.168.1.1', nodeId: 'local-node' },
     docker: { socket: '/var/run/docker.sock', pollIntervalMs: 30000 },
     directories: {

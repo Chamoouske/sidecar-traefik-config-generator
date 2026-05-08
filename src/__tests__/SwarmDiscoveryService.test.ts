@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SwarmDiscoveryService } from '../services/SwarmDiscoveryService';
-import { IDockerClient } from '../core/interfaces/IDockerClient';
 import { ILabelParser } from '../core/interfaces/ILabelParser';
 import { ILogger } from '../core/interfaces/ILogger';
 import { LabelParserService } from '../services/LabelParserService';
@@ -14,21 +13,22 @@ const mockLogger: ILogger = {
   child: () => mockLogger,
 };
 
-function createMockDockerClient(): IDockerClient {
+function createMockDockerClient() {
   return {
     connect: vi.fn(),
     disconnect: vi.fn(),
     getNodes: vi.fn(),
-    getServices: vi.fn() as any,
-    getServiceTasks: vi.fn() as any,
-    getNodeInfo: vi.fn() as any,
+    getServices: vi.fn(),
+    getServiceTasks: vi.fn(),
+    getNodeInfo: vi.fn(),
+    listContainers: vi.fn(),
     isConnected: vi.fn(),
     onReconnect: vi.fn(),
   };
 }
 
 describe('SwarmDiscoveryService', () => {
-  let dockerClient: IDockerClient;
+  let dockerClient: any;
   let labelParser: ILabelParser;
   let discovery: SwarmDiscoveryService;
 
@@ -195,77 +195,6 @@ describe('SwarmDiscoveryService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].endpoints).toHaveLength(2);
-    });
-  });
-
-  describe('discoverLocalServices', () => {
-    it('should return only services with local endpoints', async () => {
-      dockerClient.getServices.mockResolvedValue([
-        {
-          id: 'svc-local',
-          name: 'app-local',
-          labels: { 'federation.enable': 'true' },
-          image: 'nginx:latest',
-          replicas: 2,
-        },
-        {
-          id: 'svc-remote',
-          name: 'app-remote',
-          labels: { 'federation.enable': 'true' },
-          image: 'redis:latest',
-          replicas: 1,
-        },
-      ]);
-
-      dockerClient.getServiceTasks
-        .mockResolvedValueOnce([
-          {
-            id: 'task-local',
-            nodeId: 'local-node',
-            serviceId: 'svc-local',
-            status: 'running',
-            desiredState: 'running',
-            slot: 1,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: 'task-remote',
-            nodeId: 'remote-node',
-            serviceId: 'svc-remote',
-            status: 'running',
-            desiredState: 'running',
-            slot: 1,
-          },
-        ]);
-
-      dockerClient.getNodeInfo
-        .mockResolvedValueOnce({
-          id: 'local-node',
-          hostname: 'local-node',
-          ip: '127.0.0.1',
-          availability: 'active',
-          status: 'ready',
-        })
-        .mockResolvedValueOnce({
-          id: 'remote-node',
-          hostname: 'remote-node',
-          ip: '192.168.1.100',
-          availability: 'active',
-          status: 'ready',
-        });
-
-      // Set NODE_ID for the test
-      const originalNodeId = process.env.NODE_ID;
-      process.env.NODE_ID = 'local-node';
-
-      const result = await discovery.discoverLocalServices();
-
-      expect(result).toHaveLength(1);
-      expect(result[0].serviceName).toBe('app-local');
-
-      // Restore
-      process.env.NODE_ID = originalNodeId;
     });
   });
 

@@ -233,6 +233,21 @@ export class DockerClientService implements IDockerClient {
     }
 
     /**
+     * Lista containers locais filtrados por labels.
+     * Usa a API Docker local (disponível em todos os nós, inclusive workers).
+     *
+     * @param options - Opções de filtragem (ex: labels)
+     * @returns Lista de containers encontrados
+     */
+    async listContainers(options?: { filters?: Record<string, string[]> }): Promise<any[]> {
+        const opts: Docker.ContainerListOptions = {};
+        if (options?.filters) {
+            opts.filters = options.filters;
+        }
+        return this.docker.listContainers(opts);
+    }
+
+    /**
      * Manipula a detecção de desconexão, iniciando o processo
      * de reconexão automática a cada 10 segundos.
      *

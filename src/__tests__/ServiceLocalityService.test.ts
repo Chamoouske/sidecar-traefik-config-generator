@@ -5,6 +5,7 @@ import { DiscoveredService } from '../types/docker';
 
 function createConfig(nodeId: string): AppConfig {
   return {
+    mode: 'all',
     node: { hostname: 'node1', ip: '192.168.1.1', nodeId },
     docker: { socket: '/var/run/docker.sock', pollIntervalMs: 30000 },
     directories: {

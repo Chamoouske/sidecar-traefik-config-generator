@@ -7,8 +7,15 @@
 
 import * as os from 'node:os';
 import { IConfig } from '../core/interfaces/IConfig.js';
-import { AppConfig, EnvVars } from '../types/config.js';
-import { ConfigValidationError } from '../types/errors.js';
+import { GenerationMode, AppConfig, EnvVars } from '../types/config.js';
+import { ConfigValidationError, InvalidModeError } from '../types/errors.js';
+
+function parseGenerationMode(raw?: string): GenerationMode {
+    if (!raw || raw === 'all') return 'all';
+    if (raw === 'global') return 'global';
+    if (raw === 'local') return 'local';
+    throw new InvalidModeError(raw!);
+}
 
 export class AppConfigService implements IConfig {
     private config!: AppConfig;
@@ -22,6 +29,7 @@ export class AppConfigService implements IConfig {
      * @returns A configuração completa do sidecar
      */
     load(): AppConfig {
+        const mode = parseGenerationMode(this.env.GENERATION_MODE);
         const hostname = this.env.NODE_HOSTNAME || os.hostname();
         const nodeIp = this.env.NODE_IP || '127.0.0.1';
         const nodeId = this.env.NODE_ID || 'unknown';
@@ -55,6 +63,7 @@ export class AppConfigService implements IConfig {
             this.env.DEFAULT_RETRY_INTERVAL || '100ms';
 
         this.config = {
+            mode,
             node: {
                 hostname,
                 ip: nodeIp,

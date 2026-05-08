@@ -2,7 +2,10 @@
  * Tipos de Configuração do Sidecar.
  */
 
+export type GenerationMode = 'all' | 'global' | 'local';
+
 export interface AppConfig {
+    mode: GenerationMode;
     node: {
         hostname: string;
         ip: string;
@@ -52,6 +55,7 @@ export interface LabelConfig {
 }
 
 export interface EnvVars {
+    GENERATION_MODE?: string;
     NODE_HOSTNAME?: string;
     NODE_IP?: string;
     NODE_ID?: string;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AppConfigService } from '../config/index';
-import { ConfigValidationError } from '../types/errors';
+import { ConfigValidationError, InvalidModeError } from '../types/errors';
 
 describe('AppConfigService', () => {
   it('should load with defaults', () => {
@@ -176,5 +176,38 @@ describe('AppConfigService', () => {
     const config = new AppConfigService({ SERVER_PORT: 'not-a-number' });
     const result = config.load();
     expect(result.server.port).toBe(9090);
+  });
+
+  describe('GENERATION_MODE', () => {
+    it('should default to all when not set', () => {
+      const config = new AppConfigService({});
+      const result = config.load();
+      expect(result.mode).toBe('all');
+    });
+
+    it('should accept global mode', () => {
+      const config = new AppConfigService({ GENERATION_MODE: 'global' });
+      const result = config.load();
+      expect(result.mode).toBe('global');
+    });
+
+    it('should accept local mode', () => {
+      const config = new AppConfigService({ GENERATION_MODE: 'local' });
+      const result = config.load();
+      expect(result.mode).toBe('local');
+    });
+
+    it('should throw InvalidModeError for invalid mode on load()', () => {
+      const config = new AppConfigService({ GENERATION_MODE: 'invalid' });
+      expect(() => config.load()).toThrow(InvalidModeError);
+      expect(() => config.load()).toThrow(/GENERATION_MODE/);
+    });
+
+    it('should throw InvalidModeError for empty string mode', () => {
+      // Note: empty string is treated as not set, defaults to 'all'
+      const config = new AppConfigService({ GENERATION_MODE: '' });
+      const result = config.load();
+      expect(result.mode).toBe('all');
+    });
   });
 });

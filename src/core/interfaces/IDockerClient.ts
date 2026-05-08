@@ -27,4 +27,10 @@ export interface IDockerClient {
 
     /** Registra um callback para eventos de reconexão */
     onReconnect(callback: () => void): void;
+
+    /**
+     * Lista containers locais filtrados por labels.
+     * Usa a API Docker local (disponível em todos os nós, inclusive workers).
+     */
+    listContainers(options?: { filters?: Record<string, string[]> }): Promise<any[]>;
 }

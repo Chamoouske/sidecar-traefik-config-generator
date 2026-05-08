@@ -7,9 +7,6 @@ export interface ISwarmDiscovery {
     /** Descobre todos os serviços federados no Swarm */
     discoverAllServices(): Promise<DiscoveredService[]>;
 
-    /** Descobre apenas os serviços locais (no mesmo nó) */
-    discoverLocalServices(): Promise<DiscoveredService[]>;
-
     /** Retorna o ID do nó atual */
     getCurrentNodeId(): string;
 }

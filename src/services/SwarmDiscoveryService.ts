@@ -10,26 +10,31 @@
  */
 
 import { ISwarmDiscovery } from '../core/interfaces/ISwarmDiscovery.js';
+
 import { IDockerClient } from '../core/interfaces/IDockerClient.js';
 import { ILabelParser } from '../core/interfaces/ILabelParser.js';
 import {
     DiscoveredService,
     ServiceEndpoint,
 } from '../types/docker.js';
+import { AppConfig } from '../types/config.js';
 import { ILogger } from '../core/interfaces/ILogger.js';
 
-export class SwarmDiscoveryService implements ISwarmDiscovery {
+export class SwarmDiscoveryService
+    implements ISwarmDiscovery {
     /**
      * Cria uma nova instância do SwarmDiscoveryService.
      *
      * @param dockerClient - Cliente Docker para consulta à API
      * @param labelParser - Parser de labels para identificar serviços federados
      * @param logger - Logger para registro de eventos
+     * @param config - Configuração da aplicação (opcional, para nodeId)
      */
     constructor(
         private readonly dockerClient: IDockerClient,
         private readonly labelParser: ILabelParser,
         private readonly logger: ILogger,
+        private readonly config?: AppConfig,
     ) { }
 
     /**
@@ -112,38 +117,14 @@ export class SwarmDiscoveryService implements ISwarmDiscovery {
     }
 
     /**
-     * Descobre apenas os serviços federados que possuem pelo menos
-     * um endpoint rodando no nó atual.
-     *
-     * @returns Lista de serviços federados locais
-     */
-    async discoverLocalServices(): Promise<DiscoveredService[]> {
-        const allServices = await this.discoverAllServices();
-        const currentNodeId = this.getCurrentNodeId();
-
-        const localServices = allServices.filter((service) =>
-            service.endpoints.some(
-                (ep) => ep.nodeId === currentNodeId,
-            ),
-        );
-
-        this.logger.info(
-            `Local discovery: ${localServices.length} services ` +
-            `with local endpoints out of ${allServices.length} federated`,
-        );
-
-        return localServices;
-    }
-
-    /**
      * Retorna o ID do nó atual.
      *
-     * Atualmente obtido de `NODE_ID` no ambiente. Será substituído
-     * pelo {@link INodeDetector} quando implementado.
+     * Obtido de `config.node.nodeId` quando disponível, com fallback
+     * para `NODE_ID` do ambiente ou 'unknown'.
      *
      * @returns ID do nó atual
      */
     getCurrentNodeId(): string {
-        return process.env.NODE_ID || 'unknown';
+        return this.config?.node.nodeId ?? process.env.NODE_ID ?? 'unknown';
     }
 }
