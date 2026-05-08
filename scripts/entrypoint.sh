@@ -8,11 +8,12 @@ if [ ! -z "$PUID" ]; then
     fi
 fi
 
-# Ajustar GID do usuário node se GUID for fornecido
-if [ ! -z "$GUID" ]; then
-    if [ "$GUID" != "$(id -g node)" ]; then
-        echo "Ajustando GID do usuário node para $GUID"
-        groupmod -o -g "$GUID" node
+# Ajustar GID do usuário node se GUID ou PGID for fornecido
+if [ ! -z "$GUID" ] || [ ! -z "$PGID" ]; then
+    TARGET_GID=${GUID:-$PGID}
+    if [ "$TARGET_GID" != "$(id -g node)" ]; then
+        echo "Ajustando GID do usuário node para $TARGET_GID"
+        groupmod -o -g "$TARGET_GID" node
     fi
 fi
 
@@ -29,8 +30,22 @@ if [ -S /var/run/docker.sock ]; then
     echo "Usuário node adicionado ao grupo $DOCKER_GROUP (GID: $DOCKER_GID) para acesso ao Docker socket"
 fi
 
-# Garantir permissões nos diretórios de dados se houver mudança de UID/GID
-chown -R node:node /app /data/shared /data/local
+# Logar pontos de montagem e permissões para debug
+echo "--- Informações de Debug de Volume ---"
+echo "ID atual: $(id)"
+echo "Conteúdo de /data:"
+ls -la /data
+echo "Mounts ativos em /data:"
+mount | grep /data
+echo "--------------------------------------"
+
+# Garantir permissões nos diretórios de dados
+# Se /data for um volume, queremos garantir que o usuário node possa escrever nele
+if [ -d /data ]; then
+    echo "Ajustando permissões em /data recursivamente..."
+    chown -R node:node /data
+fi
+chown -R node:node /app
 
 # Executar o comando principal como usuário node usando su-exec
 # Isso permite que o container rode como root inicialmente para configurar permissões

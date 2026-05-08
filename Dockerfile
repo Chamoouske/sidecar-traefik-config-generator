@@ -43,8 +43,9 @@ COPY --from=builder /app/dist ./dist
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Volume para persistência ou compartilhamento de dados
-VOLUME ["/data/shared", "/data/local"]
+# O usuário deve gerenciar volumes via docker-compose ou docker run.
+# Evitamos declarar VOLUME aqui para não criar volumes anônimos que podem conflitar
+# com montagens no diretório pai (/data).
 
 # Usar o script de entrypoint para gerenciar permissões
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
