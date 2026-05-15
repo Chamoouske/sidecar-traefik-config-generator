@@ -18,12 +18,10 @@ func TestWriteAtomic(t *testing.T) {
 		t.Fatalf("WriteAtomic failed: %v", err)
 	}
 
-	// Verifica se o arquivo foi criado
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("Expected file to exist")
 	}
 
-	// Lê e verifica conteúdo
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
@@ -45,7 +43,6 @@ func TestWriteAtomic_DryRun(t *testing.T) {
 		t.Fatalf("WriteAtomic failed: %v", err)
 	}
 
-	// Em dry run, o arquivo NÃO deve existir
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("Expected file NOT to exist in dry run mode")
 	}
@@ -58,12 +55,10 @@ func TestDelete(t *testing.T) {
 	path := filepath.Join(dir, "delete.yaml")
 	data := []byte("test: data")
 
-	// Cria o arquivo
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Deleta
 	err := w.Delete(path)
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
@@ -78,7 +73,6 @@ func TestDelete_NotExist(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(false)
 
-	// Deletar arquivo que não existe não deve retornar erro
 	err := w.Delete(filepath.Join(dir, "nonexistent.yaml"))
 	if err != nil {
 		t.Errorf("Expected no error when deleting non-existent file, got %v", err)
@@ -95,7 +89,6 @@ func TestDelete_DryRun(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Dry run não deve deletar
 	err := w.Delete(path)
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
@@ -110,7 +103,6 @@ func TestCleanOrphans(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(false)
 
-	// Cria alguns arquivos
 	files := []string{"keep1.yaml", "keep2.yaml", "orphan1.yaml", "orphan2.yaml"}
 	for _, f := range files {
 		path := filepath.Join(dir, f)
@@ -119,7 +111,6 @@ func TestCleanOrphans(t *testing.T) {
 		}
 	}
 
-	// Arquivos esperados (orphans não estão)
 	expected := map[string]bool{
 		"keep1.yaml": true,
 		"keep2.yaml": true,

@@ -11,7 +11,6 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// Configure logger based on config
 	logger.SetLevel(cfg.LogLevel)
 
 	if err := cfg.Validate(); err != nil {

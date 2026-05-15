@@ -6,10 +6,8 @@ import (
 )
 
 func TestNewDockerClient(t *testing.T) {
-	// Testa que cria client sem host especificado (auto-detect)
 	client, err := NewDockerClient("")
 	if err != nil {
-		// Pode falhar se não houver Docker disponível, mas não deve panic
 		t.Logf("NewDockerClient failed (possibly no Docker): %v", err)
 	} else {
 		defer client.Close()
@@ -18,7 +16,6 @@ func TestNewDockerClient(t *testing.T) {
 }
 
 func TestNewDockerClient_WindowsPipe(t *testing.T) {
-	// Apenas verifica que não panic
 	client, err := NewDockerClient("npipe:////./pipe/docker_engine")
 	if err != nil {
 		t.Logf("Windows pipe connection failed (expected without Docker): %v", err)
@@ -37,7 +34,6 @@ func TestNewDockerClient_UnixSocket(t *testing.T) {
 }
 
 func TestContainerInfo_ZeroValue(t *testing.T) {
-	// Verifica que ContainerInfo com valor zero não causa panic
 	var info ContainerInfo
 	if info.ID != "" {
 		t.Error("Expected empty ID")
@@ -79,7 +75,6 @@ func TestCopyLabels(t *testing.T) {
 		t.Errorf("Expected val1, got %s", dst["key1"])
 	}
 
-	// Modificar o original não deve afetar a cópia
 	src["key1"] = "modified"
 	if dst["key1"] != "val1" {
 		t.Error("Copy should be independent of source")
@@ -94,12 +89,10 @@ func TestCopyLabels_Nil(t *testing.T) {
 }
 
 func TestDockerClient_Interface(t *testing.T) {
-	// Apenas verifica que a interface é satisfeita
 	var _ DockerClient = (*dockerClientImpl)(nil)
 }
 
 func TestListContainers_NoDocker(t *testing.T) {
-	// Testa que ListContainers retorna erro quando não há Docker disponível
 	client, err := NewDockerClient("tcp://127.0.0.1:1")
 	if err != nil {
 		t.Skipf("Skipping: could not create client: %v", err)
@@ -113,7 +106,6 @@ func TestListContainers_NoDocker(t *testing.T) {
 }
 
 func TestDockerClient_ImplementsInterface(t *testing.T) {
-	// Compile-time check: *dockerClientImpl must implement DockerClient
 	var impl interface{} = &dockerClientImpl{}
 	if _, ok := impl.(DockerClient); !ok {
 		t.Fatal("*dockerClientImpl does not implement DockerClient")

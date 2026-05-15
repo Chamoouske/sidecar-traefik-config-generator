@@ -55,7 +55,6 @@ type Config struct {
 }
 
 // LocalConfig cria config para modo local.
-// Ex: router aponta para o container diretamente via IP:porta.
 func LocalConfig(serviceName, hostRule, containerIP, containerPort string, labels map[string]string) *Config {
 	cfg := &Config{}
 	cfg.HTTP.Routers = make(map[string]*Router)
@@ -69,7 +68,6 @@ func LocalConfig(serviceName, hostRule, containerIP, containerPort string, label
 		Service:     serviceName,
 	}
 
-	// TLS config via labels
 	if tlsVal := getLabel(labels, fmt.Sprintf("traefik.http.routers.%s.tls", serviceName)); tlsVal == "true" {
 		router.TLS = &TLSConfig{}
 		if cr := getLabel(labels, fmt.Sprintf("traefik.http.routers.%s.tls.certResolver", serviceName)); cr != "" {
@@ -92,7 +90,6 @@ func LocalConfig(serviceName, hostRule, containerIP, containerPort string, label
 }
 
 // FederationConfig cria config para modo global (federation).
-// Router aponta para o nó local (ex: worker-01:80).
 func FederationConfig(serviceName, hostRule, nodeHostname string, localTraefikPort int, labels map[string]string) *Config {
 	cfg := &Config{}
 	cfg.HTTP.Routers = make(map[string]*Router)
@@ -154,7 +151,6 @@ func ParseYAML(data []byte) (*Config, error) {
 }
 
 // extractEntryPoints extrai entrypoints dos labels do Traefik.
-// Se nenhum label específico for encontrado, retorna nil (usa default do Traefik).
 func extractEntryPoints(serviceName string, labels map[string]string) []string {
 	key := fmt.Sprintf("traefik.http.routers.%s.entrypoints", serviceName)
 	val := getLabel(labels, key)

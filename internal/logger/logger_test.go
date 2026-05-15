@@ -16,7 +16,6 @@ func TestSetLevel(t *testing.T) {
 }
 
 func TestInfo(t *testing.T) {
-	// Apenas verifica que não panic
 	Info("test", "key", "value")
 }
 
@@ -34,7 +33,6 @@ func TestError(t *testing.T) {
 }
 
 func TestSetLevel_Invalid(t *testing.T) {
-	// Nível inválido deve fallback para info
 	SetLevel("invalid")
 	Info("should appear after invalid level")
 }

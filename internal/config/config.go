@@ -41,7 +41,6 @@ func Load() *Config {
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 	}
 
-	// Auto-detect NodeIP if not provided
 	if cfg.NodeIP == "" {
 		cfg.NodeIP = detectNodeIP()
 	}
@@ -133,7 +132,6 @@ func detectNodeIP() string {
 	// Priority list of interface names to check
 	priorityNames := []string{"docker_gwbridge", "eth0", "ens160", "ens192", "enp0s3"}
 
-	// First pass: look for known interface names
 	for _, name := range priorityNames {
 		for _, iface := range interfaces {
 			if iface.Name == name {
@@ -144,7 +142,6 @@ func detectNodeIP() string {
 		}
 	}
 
-	// Second pass: any non-loopback interface with a private IPv4 address
 	for _, iface := range interfaces {
 		if iface.Flags&net.FlagLoopback != 0 {
 			continue
@@ -194,7 +191,6 @@ func isPrivateIP(ip net.IP) bool {
 	}
 	for _, r := range privateRanges {
 		if bytes := ip.To4(); bytes != nil {
-			// Simple range check
 			if bytes[0] == r.start[0] {
 				if bytes[0] == 10 {
 					return true

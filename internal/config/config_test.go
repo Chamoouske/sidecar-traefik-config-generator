@@ -6,7 +6,6 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	// Garante que variáveis de ambiente não estão definidas
 	os.Unsetenv("MODE")
 	os.Unsetenv("NODE_HOSTNAME")
 	os.Unsetenv("NODE_IP")
@@ -175,8 +174,8 @@ func TestGetEnvBool(t *testing.T) {
 		{"false", true, false},
 		{"0", true, false},
 		{"no", true, false},
-		{"maybe", true, true}, // unrecognized -> fallback
-		{"", true, true},      // empty -> fallback
+		{"maybe", true, true},
+		{"", true, true},
 	}
 
 	for _, tt := range tests {

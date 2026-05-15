@@ -16,7 +16,7 @@ type HostRule struct {
 	HasCustom bool   // true se foi sobrescrito por label
 }
 
-// Build gera o HostRule automaticamente no formato "service.node.{domainSuffix}".
+// Build gera o HostRule no formato "service.node.{domainSuffix}".
 func Build(serviceName, nodeHostname, domainSuffix string) *HostRule {
 	if domainSuffix == "" {
 		domainSuffix = "lab"
@@ -29,7 +29,6 @@ func Build(serviceName, nodeHostname, domainSuffix string) *HostRule {
 }
 
 // BuildFromLabels verifica se existe label traefik.federation.host.
-// Se existir, usa esse valor customizado em vez do auto-generated.
 func BuildFromLabels(serviceName, nodeHostname, domainSuffix string, labels map[string]string) *HostRule {
 	if labels != nil {
 		if host, ok := labels["traefik.federation.host"]; ok && host != "" {

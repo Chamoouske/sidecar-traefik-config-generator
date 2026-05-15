@@ -10,7 +10,7 @@ import (
 // EventHandler é chamada quando um evento Docker de interesse ocorre.
 type EventHandler func(eventType string, containerID string, containerName string)
 
-// DockerWatcher monitora eventos Docker (start, stop, update, destroy).
+// DockerWatcher monitora eventos Docker.
 type DockerWatcher struct {
 	client  docker.DockerClient
 	handler EventHandler
@@ -24,9 +24,7 @@ func NewDockerWatcher(dockerClient docker.DockerClient, handler EventHandler) *D
 	}
 }
 
-// Start inicia o watching de eventos Docker em background.
-// Eventos monitorados: start, stop, die, destroy, update.
-// Para cada evento, chama o handler registrado.
+// Start inicia o watching de eventos Docker.
 func (w *DockerWatcher) Start(ctx context.Context) error {
 	eventsCh, errCh := w.client.WatchEvents(ctx)
 
@@ -52,10 +50,9 @@ func (w *DockerWatcher) Start(ctx context.Context) error {
 				return nil
 			}
 
-			// Mapeia ações do Docker para tipos de eventos normalizados
 			eventType := normalizeEventType(string(msg.Action))
 			if eventType == "" {
-				continue // evento não nos interessa
+				continue
 			}
 
 			containerID := msg.Actor.ID
@@ -76,7 +73,6 @@ func (w *DockerWatcher) Start(ctx context.Context) error {
 }
 
 // normalizeEventType mapeia ações do Docker para tipos normalizados.
-// Retorna string vazia se o evento não é de interesse.
 func normalizeEventType(action string) string {
 	switch action {
 	case "start":

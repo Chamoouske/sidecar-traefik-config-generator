@@ -14,7 +14,6 @@ type Reconciler struct {
 }
 
 // NewReconciler cria um novo Reconciler.
-// pollInterval em segundos.
 func NewReconciler(pollInterval int, onTick func()) *Reconciler {
 	return &Reconciler{
 		pollInterval: time.Duration(pollInterval) * time.Second,
@@ -26,7 +25,6 @@ func NewReconciler(pollInterval int, onTick func()) *Reconciler {
 func (r *Reconciler) Start(ctx context.Context) {
 	logger.Info("reconciler started", "interval", r.pollInterval.String())
 
-	// Executa imediatamente na primeira vez
 	r.onTick()
 
 	ticker := time.NewTicker(r.pollInterval)

@@ -43,7 +43,6 @@ func (g *LocalGenerator) Start() error {
 		"node", g.cfg.NodeHostname,
 		"output", g.cfg.LocalOutputPath)
 
-	// Conecta ao Docker
 	var err error
 	g.client, err = docker.NewDockerClient(g.cfg.DockerHost)
 	if err != nil {
@@ -54,7 +53,6 @@ func (g *LocalGenerator) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Watch Docker events
 	dw := watcher.NewDockerWatcher(g.client, func(eventType, containerID, containerName string) {
 		logger.Info("docker event received", "type", eventType, "container", containerName, "id", containerID)
 
@@ -69,7 +67,6 @@ func (g *LocalGenerator) Start() error {
 				g.handleContainer(ctx, container, true)
 			}
 		case "stop", "destroy":
-			// Remove o arquivo do serviço
 			g.removeServiceFile(containerName)
 		}
 	})
@@ -80,17 +77,14 @@ func (g *LocalGenerator) Start() error {
 		}
 	}()
 
-	// Reconciliation loop
 	rec := reconciler.NewReconciler(g.cfg.PollInterval, func() {
 		g.reconcile(ctx)
 	})
 
 	go rec.Start(ctx)
 
-	// Executa reconciliação inicial
 	g.reconcile(ctx)
 
-	// Aguarda sinal de parada
 	<-g.stopCh
 	return nil
 }
@@ -113,23 +107,19 @@ func (g *LocalGenerator) reconcile(ctx context.Context) {
 	var services []registry.ServiceRegistration
 
 	for _, container := range containers {
-		// Pula containers não running
 		if container.State != "running" {
 			continue
 		}
 
-		// Auto-detecta porta (primeira exposta)
 		port := ""
 		if len(container.Ports) > 0 {
 			port = container.Ports[0]
 		}
 
-		// Verifica label de porta override
 		if overridePort, ok := container.Labels["traefik.federation.port"]; ok {
 			port = overridePort
 		}
 
-		// Pega IP do container na rede
 		containerIP := ""
 		for _, ip := range container.Networks {
 			containerIP = ip
@@ -144,7 +134,6 @@ func (g *LocalGenerator) reconcile(ctx context.Context) {
 
 		g.handleContainer(ctx, &container, false)
 
-		// Prepara registro
 		hr := hostrule.BuildFromLabels(
 			container.Name,
 			g.cfg.NodeHostname,
@@ -169,7 +158,6 @@ func (g *LocalGenerator) reconcile(ctx context.Context) {
 		expectedFiles[container.Name+".yaml"] = true
 	}
 
-	// Limpa órfãos
 	orphans, err := g.writer.CleanOrphans(g.cfg.LocalOutputPath, expectedFiles)
 	if err != nil {
 		logger.Error("failed to clean orphan files", "error", err)
@@ -178,7 +166,6 @@ func (g *LocalGenerator) reconcile(ctx context.Context) {
 		logger.Info("cleaned orphan file", "file", orphan)
 	}
 
-	// Atualiza registro do nó
 	reg := &registry.NodeRegistration{
 		NodeHostname:     g.cfg.NodeHostname,
 		NodeIP:           g.cfg.NodeIP,
@@ -208,18 +195,15 @@ func (g *LocalGenerator) handleContainer(ctx context.Context, c *docker.Containe
 		c.Labels,
 	)
 
-	// Auto-detecta porta (primeira exposta)
 	port := ""
 	if len(c.Ports) > 0 {
 		port = c.Ports[0]
 	}
 
-	// Verifica label de porta override
 	if overridePort, ok := c.Labels["traefik.federation.port"]; ok {
 		port = overridePort
 	}
 
-	// Pega IP do container na rede
 	containerIP := ""
 	for _, ip := range c.Networks {
 		containerIP = ip

@@ -19,20 +19,16 @@ type ContainerInfo struct {
 	Name         string
 	NodeHostname string
 	Labels       map[string]string
-	Ports        []string          // portas expostas no formato "8080/tcp"
+	Ports        []string
 	Networks     map[string]string // network name -> IP
 	State        string            // "running", "stopped", etc.
 }
 
 // DockerClient defines the interface for Docker operations.
 type DockerClient interface {
-	// ListContainers retorna containers com o label traefik.federation.enable=true
 	ListContainers(ctx context.Context) ([]ContainerInfo, error)
-	// GetContainer retorna informações de um container específico
 	GetContainer(ctx context.Context, containerID string) (*ContainerInfo, error)
-	// WatchEvents retorna um channel de eventos Docker
 	WatchEvents(ctx context.Context) (<-chan events.Message, <-chan error)
-	// Close fecha a conexão
 	Close() error
 }
 
@@ -42,8 +38,6 @@ type dockerClientImpl struct {
 }
 
 // NewDockerClient cria cliente apropriado baseado no dockerHost.
-// Se dockerHost vazio, auto-detects: Windows -> npipe:////./pipe/docker_engine,
-// Linux -> unix:///var/run/docker.sock.
 func NewDockerClient(dockerHost string) (DockerClient, error) {
 	if dockerHost == "" {
 		if runtime.GOOS == "windows" {
@@ -84,7 +78,7 @@ func (d *dockerClientImpl) ListContainers(ctx context.Context) ([]ContainerInfo,
 	return containers, nil
 }
 
-// GetContainer retorna informações de um container específico via inspect.
+// GetContainer retorna informações de um container específico.
 func (d *dockerClientImpl) GetContainer(ctx context.Context, containerID string) (*ContainerInfo, error) {
 	inspectResult, err := d.cli.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
 	if err != nil {

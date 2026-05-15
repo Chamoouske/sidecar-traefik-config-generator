@@ -36,7 +36,7 @@ type ServiceRegistration struct {
 
 // Registry gerencia leitura/escrita de arquivos de registro.
 type Registry struct {
-	registryPath string // /config/shared/registry
+	registryPath string
 }
 
 // NewRegistry cria um novo Registry.
@@ -44,7 +44,7 @@ func NewRegistry(registryPath string) *Registry {
 	return &Registry{registryPath: registryPath}
 }
 
-// WriteNodeRegistration escreve o arquivo <nodeHostname>.yaml no diretório de registro.
+// WriteNodeRegistration escreve o registro de um nó.
 func (r *Registry) WriteNodeRegistration(reg *NodeRegistration) error {
 	reg.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
@@ -66,7 +66,7 @@ func (r *Registry) WriteNodeRegistration(reg *NodeRegistration) error {
 	return nil
 }
 
-// ReadNodeRegistration lê o arquivo de registro de um nó específico.
+// ReadNodeRegistration lê o registro de um nó específico.
 func (r *Registry) ReadNodeRegistration(nodeHostname string) (*NodeRegistration, error) {
 	filePath := filepath.Join(r.registryPath, nodeHostname+".yaml")
 	data, err := os.ReadFile(filePath)
@@ -85,7 +85,7 @@ func (r *Registry) ReadNodeRegistration(nodeHostname string) (*NodeRegistration,
 	return &reg, nil
 }
 
-// ListAllNodes retorna todos os nós registrados (lê todos arquivos .yaml no diretório).
+// ListAllNodes retorna todos os nós registrados.
 func (r *Registry) ListAllNodes() ([]*NodeRegistration, error) {
 	entries, err := os.ReadDir(r.registryPath)
 	if err != nil {
@@ -113,7 +113,6 @@ func (r *Registry) ListAllNodes() ([]*NodeRegistration, error) {
 		nodes = append(nodes, reg)
 	}
 
-	// Ordena por nome para consistência
 	sort.Slice(nodes, func(i, j int) bool {
 		return nodes[i].NodeHostname < nodes[j].NodeHostname
 	})
@@ -143,8 +142,7 @@ type NodeWithService struct {
 	Service          ServiceRegistration
 }
 
-// WatchRegistryChanges retorna um channel que notifica quando arquivos no diretório mudam.
-// Usa fsnotify para watch de diretório.
+// WatchRegistryChanges retorna um channel notificando mudanças no diretório de registro.
 func (r *Registry) WatchRegistryChanges(ctx context.Context) (<-chan string, <-chan error) {
 	notifyCh := make(chan string)
 	errCh := make(chan error)
@@ -160,7 +158,6 @@ func (r *Registry) WatchRegistryChanges(ctx context.Context) (<-chan string, <-c
 		}
 		defer watcher.Close()
 
-		// Garante que o diretório existe
 		if err := os.MkdirAll(r.registryPath, 0755); err != nil {
 			errCh <- fmt.Errorf("failed to create registry directory: %w", err)
 			return
@@ -179,7 +176,6 @@ func (r *Registry) WatchRegistryChanges(ctx context.Context) (<-chan string, <-c
 				if !ok {
 					return
 				}
-				// Filtra apenas eventos de escrita/criação/remoção de arquivos .yaml
 				if strings.HasSuffix(event.Name, ".yaml") || strings.HasSuffix(event.Name, ".yml") {
 					switch event.Op {
 					case fsnotify.Create, fsnotify.Write, fsnotify.Remove, fsnotify.Rename:

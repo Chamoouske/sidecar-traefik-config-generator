@@ -12,13 +12,11 @@ func TestLocalConfig(t *testing.T) {
 		t.Fatalf("ToYAML failed: %v", err)
 	}
 
-	// Verifica se é YAML válido
 	parsed, err := ParseYAML(data)
 	if err != nil {
 		t.Fatalf("ParseYAML failed: %v", err)
 	}
 
-	// Verifica router
 	router, ok := parsed.HTTP.Routers["api"]
 	if !ok {
 		t.Fatal("Expected router 'api'")
@@ -26,7 +24,6 @@ func TestLocalConfig(t *testing.T) {
 	if router.Rule != "Host(`api.worker-01.lab`)" {
 		t.Errorf("Expected rule Host(`api.worker-01.lab`), got %s", router.Rule)
 	}
-	// Sem labels, entrypoints deve ser nil (usa default do Traefik)
 	if router.EntryPoints != nil {
 		t.Errorf("Expected nil entrypoints (using Traefik defaults), got %v", router.EntryPoints)
 	}
@@ -34,7 +31,6 @@ func TestLocalConfig(t *testing.T) {
 		t.Errorf("Expected service api, got %s", router.Service)
 	}
 
-	// Verifica service
 	svc, ok := parsed.HTTP.Services["api"]
 	if !ok {
 		t.Fatal("Expected service 'api'")
@@ -63,7 +59,6 @@ func TestFederationConfig(t *testing.T) {
 		t.Fatalf("ParseYAML failed: %v", err)
 	}
 
-	// Verifica router
 	router, ok := parsed.HTTP.Routers["api"]
 	if !ok {
 		t.Fatalf("Expected router 'api'")
@@ -75,7 +70,6 @@ func TestFederationConfig(t *testing.T) {
 		t.Errorf("Expected service api, got %s", router.Service)
 	}
 
-	// Verifica service apontando para o nó local
 	svc, ok := parsed.HTTP.Services["api"]
 	if !ok {
 		t.Fatalf("Expected service 'api'")
@@ -114,12 +108,10 @@ func TestLocalConfig_WithCustomLabels(t *testing.T) {
 		t.Fatal("Expected router 'api'")
 	}
 
-	// Entrypoints devem ser sobrescritos pelo label (web,websecure)
 	if len(router.EntryPoints) != 2 || router.EntryPoints[0] != "web" || router.EntryPoints[1] != "websecure" {
 		t.Errorf("Expected entrypoints [web, websecure], got %v", router.EntryPoints)
 	}
 
-	// TLS deve estar habilitado
 	if router.TLS == nil {
 		t.Error("Expected TLS to be enabled")
 	}
@@ -162,7 +154,6 @@ func TestParseYAML_Invalid(t *testing.T) {
 }
 
 func TestLocalConfig_NilEntrypoints(t *testing.T) {
-	// Quando não há label de entrypoints, o campo deve ser nil
 	cfg := LocalConfig("api", "Host(`api.test.lab`)", "10.0.0.1", "8080", nil)
 
 	data, err := cfg.ToYAML()
@@ -180,7 +171,6 @@ func TestLocalConfig_NilEntrypoints(t *testing.T) {
 		t.Fatal("Expected router 'api'")
 	}
 
-	// EntryPoints deve ser nil (não definido), não um slice vazio
 	if router.EntryPoints != nil {
 		t.Logf("EntryPoints is %v (nil is also acceptable if Traefik uses defaults)", router.EntryPoints)
 	}

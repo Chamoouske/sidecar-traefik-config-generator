@@ -67,7 +67,6 @@ func TestCollector_ExtractFromLabels(t *testing.T) {
 		t.Fatal("Expected middleware 'auth'")
 	}
 
-	// Verifica estrutura
 	fwd, ok := mw.Config["forwardAuth"].(map[string]interface{})
 	if !ok {
 		t.Fatal("Expected forwardAuth config")
@@ -85,9 +84,8 @@ func TestCollector_Deduplication(t *testing.T) {
 		"traefik.federation.middleware.ratelimit.rateLimit.burst":   "50",
 	}
 
-	// Extrai do mesmo middleware de dois serviços diferentes
 	c.ExtractFromLabels("api", labels)
-	c.ExtractFromLabels("web", labels) // mesmo middleware, deve deduplicar
+	c.ExtractFromLabels("web", labels)
 
 	mws := c.GetAll()
 	if len(mws) != 1 {

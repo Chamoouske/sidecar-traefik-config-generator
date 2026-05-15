@@ -42,7 +42,6 @@ func (g *GlobalGenerator) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Watch registry changes
 	regEvents, regErrors := g.reg.WatchRegistryChanges(ctx)
 
 	go func() {
@@ -61,17 +60,14 @@ func (g *GlobalGenerator) Start() error {
 		}
 	}()
 
-	// Reconciliation loop
 	rec := reconciler.NewReconciler(g.cfg.PollInterval, func() {
 		g.reconcile(ctx)
 	})
 
 	go rec.Start(ctx)
 
-	// Executa reconciliação inicial
 	g.reconcile(ctx)
 
-	// Aguarda sinal de parada
 	<-g.stopCh
 	return nil
 }
@@ -84,7 +80,6 @@ func (g *GlobalGenerator) Stop() {
 func (g *GlobalGenerator) reconcile(ctx context.Context) {
 	logger.Debug("reconciling federation and middlewares")
 
-	// Lê todos os nós registrados
 	nodes, err := g.reg.ListAllNodes()
 	if err != nil {
 		logger.Error("failed to list registered nodes", "error", err)
@@ -96,7 +91,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 		logger.Debug("node registered", "hostname", n.NodeHostname, "ip", n.NodeIP, "services", len(n.Services))
 	}
 
-	// Agrupa serviços por nome (um serviço pode estar em múltiplos nós)
 	serviceMap := make(map[string][]registry.NodeWithService)
 	for _, node := range nodes {
 		for _, svc := range node.Services {
@@ -109,12 +103,10 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 		}
 	}
 
-	// Gera arquivos de federação
 	expectedFederationFiles := make(map[string]bool)
 	middlewareCollector := middleware.NewCollector()
 
 	for serviceName, nodeServices := range serviceMap {
-		// Se múltiplos nós, pega o primeiro para labels de referência
 		first := nodeServices[0]
 		hr := hostrule.BuildFromLabels(
 			serviceName,
@@ -131,8 +123,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 			first.Service.Labels,
 		)
 
-		// Renomeia router/service para usar sufixo -federation
-		// Isso evita conflito com nomes de serviço locais
 		federationKey := serviceName + "-federation"
 		if router, ok := cfg.HTTP.Routers[serviceName]; ok {
 			delete(cfg.HTTP.Routers, serviceName)
@@ -144,7 +134,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 			cfg.HTTP.Services[federationKey] = svc
 		}
 
-		// Se o serviço existe em múltiplos nós, adiciona servidores extras
 		if len(nodeServices) > 1 {
 			if svc, ok := cfg.HTTP.Services[federationKey]; ok && svc.LoadBalancer != nil {
 				for i := 1; i < len(nodeServices); i++ {
@@ -157,7 +146,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 			}
 		}
 
-		// Extrai nomes de middlewares do label e adiciona ao router
 		middlewareNames := middleware.ExtractMiddlewareNames(first.Service.Labels)
 		if len(middlewareNames) > 0 {
 			if router, ok := cfg.HTTP.Routers[federationKey]; ok {
@@ -165,7 +153,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 			}
 		}
 
-		// Extrai middlewares das labels para o collector
 		middlewareCollector.ExtractFromLabels(serviceName, first.Service.Labels)
 
 		data, err := cfg.ToYAML()
@@ -184,7 +171,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 		logger.Info("generated federation config", "file", filePath, "nodes", len(nodeServices))
 	}
 
-	// Gera arquivos de middleware
 	expectedMiddlewareFiles := make(map[string]bool)
 	for name, mw := range middlewareCollector.GetAll() {
 		cfg := configbuilder.MiddlewareConfig(name, mw.Config)
@@ -205,7 +191,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 		logger.Info("generated middleware config", "file", filePath)
 	}
 
-	// Limpa órfãos de federação
 	fedOrphans, err := g.writer.CleanOrphans(
 		filepath.Join(g.cfg.SharedOutputPath, "federation"),
 		expectedFederationFiles)
@@ -216,7 +201,6 @@ func (g *GlobalGenerator) reconcile(ctx context.Context) {
 		logger.Info("cleaned federation orphan", "file", orphan)
 	}
 
-	// Limpa órfãos de middlewares
 	mwOrphans, err := g.writer.CleanOrphans(
 		filepath.Join(g.cfg.SharedOutputPath, "middlewares"),
 		expectedMiddlewareFiles)

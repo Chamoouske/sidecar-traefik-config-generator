@@ -4,15 +4,15 @@ import (
 	"strings"
 )
 
-// Middleware representa definição de um middleware Traefik reutilizável.
+// Middleware representa definição de um middleware Traefik.
 type Middleware struct {
 	Name   string
-	Config map[string]interface{} // estrutura YAML do middleware
+	Config map[string]interface{}
 }
 
-// Collector coleta middlewares dos labels dos containers e deduplica.
+// Collector coleta middlewares dos labels e deduplica.
 type Collector struct {
-	middlewares map[string]*Middleware // name -> middleware (deduplicado)
+	middlewares map[string]*Middleware
 }
 
 // NewCollector cria um novo Collector.
@@ -22,9 +22,7 @@ func NewCollector() *Collector {
 	}
 }
 
-// ExtractFromLabels extrai definições de middleware dos labels de um container.
-// Labels seguem o padrão: traefik.federation.middleware.<name>.<type>.<key>=<value>
-// Ex: traefik.federation.middleware.auth.forwardAuth.address=http://auth:8080/verify
+// ExtractFromLabels extrai definições de middleware dos labels.
 func (c *Collector) ExtractFromLabels(serviceName string, labels map[string]string) {
 	if labels == nil {
 		return
@@ -47,13 +45,11 @@ func (c *Collector) ExtractFromLabels(serviceName string, labels map[string]stri
 		middlewareName := parts[0]
 		middlewareType := parts[1]
 
-		// <name>.<type>.<key> ou <name>.<type>
 		var middlewareKey string
 		if len(parts) == 3 {
 			middlewareKey = parts[2]
 		}
 
-		// Obtém ou cria o middleware
 		mw, exists := c.middlewares[middlewareName]
 		if !exists {
 			mw = &Middleware{
@@ -63,7 +59,6 @@ func (c *Collector) ExtractFromLabels(serviceName string, labels map[string]stri
 			c.middlewares[middlewareName] = mw
 		}
 
-		// Constrói a estrutura aninhada: type -> key -> value
 		typeConfig, ok := mw.Config[middlewareType].(map[string]interface{})
 		if !ok {
 			typeConfig = make(map[string]interface{})
@@ -72,16 +67,11 @@ func (c *Collector) ExtractFromLabels(serviceName string, labels map[string]stri
 
 		if middlewareKey != "" {
 			typeConfig[middlewareKey] = value
-		} else {
-			// Caso seja apenas <name>.<type> sem key, trata como valor único
-			// Ex: traefik.federation.middleware.auth.basicauth -> true
-			// Isso permite middlewares simples como "basicauth" sem sub-config
 		}
 	}
 }
 
-// ExtractMiddlewareNames retorna a lista de nomes de middleware do label
-// traefik.federation.middlewares. Ex: "auth,ratelimit" -> ["auth", "ratelimit"].
+// ExtractMiddlewareNames retorna nomes de middlewares do label.
 func ExtractMiddlewareNames(labels map[string]string) []string {
 	if labels == nil {
 		return nil
@@ -103,7 +93,7 @@ func ExtractMiddlewareNames(labels map[string]string) []string {
 	return names
 }
 
-// GetAll retorna todos os middlewares coletados (mapa nome -> definição).
+// GetAll retorna todos os middlewares coletados.
 func (c *Collector) GetAll() map[string]*Middleware {
 	return c.middlewares
 }

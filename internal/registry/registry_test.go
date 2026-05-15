@@ -29,13 +29,11 @@ func TestWriteAndReadNodeRegistration(t *testing.T) {
 		t.Fatalf("WriteNodeRegistration failed: %v", err)
 	}
 
-	// Verifica que o arquivo foi criado
 	path := filepath.Join(dir, "worker-01.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("Expected registration file to exist")
 	}
 
-	// Lê de volta
 	read, err := reg.ReadNodeRegistration("worker-01")
 	if err != nil {
 		t.Fatalf("ReadNodeRegistration failed: %v", err)
@@ -56,7 +54,6 @@ func TestListAllNodes(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry(dir)
 
-	// Cria dois registros
 	reg.WriteNodeRegistration(&NodeRegistration{
 		NodeHostname: "node-01", NodeIP: "10.0.0.1", LocalTraefikPort: 80,
 	})
@@ -130,7 +127,6 @@ func TestListAllNodes_SortsByName(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry(dir)
 
-	// Cria registros fora de ordem
 	reg.WriteNodeRegistration(&NodeRegistration{
 		NodeHostname: "zeta-01", NodeIP: "10.0.0.3",
 	})
@@ -150,7 +146,6 @@ func TestListAllNodes_SortsByName(t *testing.T) {
 		t.Fatalf("Expected 3 nodes, got %d", len(nodes))
 	}
 
-	// Verifica ordem alfabética
 	if nodes[0].NodeHostname != "alpha-01" {
 		t.Errorf("Expected first node alpha-01, got %s", nodes[0].NodeHostname)
 	}

@@ -2,7 +2,6 @@ package filewriter
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,9 +21,7 @@ func NewWriter(dryRun bool) *Writer {
 }
 
 // WriteAtomic escreve dados em .tmp e renomeia para destino atômico.
-// Isso previne que o Traefik leia arquivos parcialmente escritos.
 func (w *Writer) WriteAtomic(path string, data []byte) error {
-	// Valida o YAML antes de escrever
 	if _, err := configbuilder.ParseYAML(data); err != nil {
 		return fmt.Errorf("invalid YAML for %s: %w", path, err)
 	}
@@ -34,21 +31,17 @@ func (w *Writer) WriteAtomic(path string, data []byte) error {
 		return nil
 	}
 
-	// Garante que o diretório existe
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	// Escreve em arquivo temporário
 	tmpPath := path + ".tmp"
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write temp file %s: %w", tmpPath, err)
 	}
 
-	// Renomeia atômicamente (rename é atômico no mesmo filesystem)
 	if err := os.Rename(tmpPath, path); err != nil {
-		// Tenta limpar o tmp em caso de erro
 		os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename %s to %s: %w", tmpPath, path, err)
 	}
@@ -66,7 +59,7 @@ func (w *Writer) Delete(path string) error {
 
 	if err := os.Remove(path); err != nil {
 		if os.IsNotExist(err) {
-			return nil // arquivo já não existe, considerado sucesso
+			return nil
 		}
 		return fmt.Errorf("failed to delete %s: %w", path, err)
 	}
@@ -75,9 +68,7 @@ func (w *Writer) Delete(path string) error {
 	return nil
 }
 
-// CleanOrphans varre um diretório comparando arquivos existentes com uma lista
-// de arquivos esperados. Remove qualquer arquivo .yaml que NÃO esteja na lista
-// de esperados. Retorna a lista de arquivos removidos.
+// CleanOrphans varre um diretório removendo arquivos .yaml não esperados.
 func (w *Writer) CleanOrphans(dir string, expectedFiles map[string]bool) ([]string, error) {
 	removed := make([]string, 0)
 
@@ -103,7 +94,6 @@ func (w *Writer) CleanOrphans(dir string, expectedFiles map[string]bool) ([]stri
 			continue
 		}
 
-		// Pula arquivos temporários
 		if strings.HasSuffix(entry.Name(), ".tmp") {
 			continue
 		}
@@ -115,7 +105,6 @@ func (w *Writer) CleanOrphans(dir string, expectedFiles map[string]bool) ([]stri
 				continue
 			}
 
-			// Verifica se é um arquivo regular (não um symlink problemático)
 			if !info.Mode().IsRegular() {
 				continue
 			}
@@ -125,8 +114,6 @@ func (w *Writer) CleanOrphans(dir string, expectedFiles map[string]bool) ([]stri
 				continue
 			}
 
-			// Trata erro de tipo vs bool
-			_ = fs.FileMode(0)
 			removed = append(removed, fullPath)
 		}
 	}
