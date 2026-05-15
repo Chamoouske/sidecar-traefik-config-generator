@@ -1,27 +1,50 @@
-# ======================================================================
-# docker-compose.yml — Sidecar Traefik (Docker Swarm)
-# ======================================================================
-#
-# ATENÇÃO: Este compose substitui APENAS os serviços federation-generator
-# e local-generator do seu stack original. O restante do compose (traefik,
-# syncthing, whoami, networks) deve permanecer igual ao seu compose original.
-#
-# Compatibilidade de volumes:
-#   - O volume sync_data é compartilhado entre:
-#       Traefik → montado em /dynamic
-#       Sidecars → montado em /data
-#   - SHARED_OUTPUT_PATH=/data/shared/generated
-#     → aparece em /dynamic/shared/generated para o Traefik
-#   - REGISTRY_PATH=/data/shared/registry
-#     → aparece em /dynamic/shared/registry para o Traefik
-#
-# Uso em Docker Swarm (deploy.mode, deploy.replicas, deploy.placement):
-#   docker stack deploy -c docker-compose.yml <stack_name>
-# ======================================================================
-
-version: '3.8'
-
 services:
+  traefik:
+    image: traefik:v3.7
+    hostname: "{{.Node.Hostname}}"
+    networks:
+      - traefik
+    environment: 
+      - PUID=1000
+      - GUID=1000
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+    volumes:
+      - type: bind
+        target: /var/run/docker.sock
+        source: /var/run/docker.sock
+      - type: volume
+        source: sync_data
+        target: /dynamic
+    command:
+      - "--entrypoints.web.address=:80"
+      # Configure HTTP to HTTPS Redirection
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      # HTTPS EntryPoint
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+      # Attach dynamic TLS file
+      - "--providers.file.filename=/dynamic/shared/tls.yaml"
+      # Providers
+      # Enable the Docker Swarm provider (instead of Docker provider)
+      - "--providers.swarm.endpoint=unix:///var/run/docker.sock"
+      # Recommended: Don't expose services by default; require explicit labels
+      - "--providers.swarm.exposedbydefault=false"
+      # Observability
+      - "--log.level=INFO" # Set the Log Level e.g INFO, DEBUG
+      - "--accesslog=true" # Enable Access Logs
+      - "--metrics.prometheus=true"  # Enable Prometheus
+    deploy:
+      mode: global
 
   # ------------------------------------------------------------------
   # sidecar-global — Modo global (1 réplica, manager node)
@@ -73,6 +96,52 @@ services:
     deploy:
       mode: global
 
+  syncthing:
+    image: syncthing/syncthing:latest
+    hostname: "syncthing.{{.Node.Hostname}}"
+    environment:
+      - STGUIADDRESS=0.0.0.0:8384
+      - PUID=1000
+      - GUID=1000
+    volumes:
+      - sync_data:/var/syncthing
+    ports:
+      - target: 8384
+        published: 8384
+        mode: host
+      - target: 22000
+        published: 22000
+        mode: host
+      - target: 21027
+        published: 21027
+        protocol: udp
+        mode: host
+    deploy:
+      mode: global
+      labels:
+        - "traefik.federation.enable=true"
+  # Deploy the Whoami application
+  whoami:
+    image: traefik/whoami
+    hostname: "whoami.{{.Node.Hostname}}"
+    #rule: "Host(`whoami.local`) && Headers(`X-Internal`,`true`)"
+    networks:
+      - traefik
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+      # Placement constraints restrict where Traefik tasks can run.
+      # Running on manager nodes is common for accessing the Swarm API via the socket.
+        constraints:
+          - node.role == worker
+      labels:
+        - "traefik.federation.enable=true"
 volumes:
   sync_data:
     driver: local
+# Define the overlay network for Swarm
+networks:
+  traefik:
+    name: central
+    external: true
