@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ajaxl/sidecar/internal/logger"
+	"github.com/chamoouske/sidecar/internal/logger"
 )
 
 // Reconciler executa um loop de reconciliação em intervalo fixo.

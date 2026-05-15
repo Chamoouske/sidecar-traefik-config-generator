@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ajaxl/sidecar/internal/configbuilder"
-	"github.com/ajaxl/sidecar/internal/logger"
+	"github.com/chamoouske/sidecar/internal/configbuilder"
+	"github.com/chamoouske/sidecar/internal/logger"
 )
 
 // Writer gerencia escrita de arquivos com segurança.

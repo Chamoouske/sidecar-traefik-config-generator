@@ -7,15 +7,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ajaxl/sidecar/internal/config"
-	"github.com/ajaxl/sidecar/internal/configbuilder"
-	"github.com/ajaxl/sidecar/internal/docker"
-	"github.com/ajaxl/sidecar/internal/filewriter"
-	"github.com/ajaxl/sidecar/internal/hostrule"
-	"github.com/ajaxl/sidecar/internal/logger"
-	"github.com/ajaxl/sidecar/internal/reconciler"
-	"github.com/ajaxl/sidecar/internal/registry"
-	"github.com/ajaxl/sidecar/internal/watcher"
+	"github.com/chamoouske/sidecar/internal/config"
+	"github.com/chamoouske/sidecar/internal/configbuilder"
+	"github.com/chamoouske/sidecar/internal/docker"
+	"github.com/chamoouske/sidecar/internal/filewriter"
+	"github.com/chamoouske/sidecar/internal/hostrule"
+	"github.com/chamoouske/sidecar/internal/logger"
+	"github.com/chamoouske/sidecar/internal/reconciler"
+	"github.com/chamoouske/sidecar/internal/registry"
+	"github.com/chamoouske/sidecar/internal/watcher"
 )
 
 // LocalGenerator generates Traefik configuration for local mode.

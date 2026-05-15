@@ -3,8 +3,8 @@ package watcher
 import (
 	"context"
 
-	"github.com/ajaxl/sidecar/internal/docker"
-	"github.com/ajaxl/sidecar/internal/logger"
+	"github.com/chamoouske/sidecar/internal/docker"
+	"github.com/chamoouske/sidecar/internal/logger"
 )
 
 // EventHandler é chamada quando um evento Docker de interesse ocorre.

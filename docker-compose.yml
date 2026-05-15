@@ -1,0 +1,78 @@
+# ======================================================================
+# docker-compose.yml — Sidecar Traefik (Docker Swarm)
+# ======================================================================
+#
+# ATENÇÃO: Este compose substitui APENAS os serviços federation-generator
+# e local-generator do seu stack original. O restante do compose (traefik,
+# syncthing, whoami, networks) deve permanecer igual ao seu compose original.
+#
+# Compatibilidade de volumes:
+#   - O volume sync_data é compartilhado entre:
+#       Traefik → montado em /dynamic
+#       Sidecars → montado em /data
+#   - SHARED_OUTPUT_PATH=/data/shared/generated
+#     → aparece em /dynamic/shared/generated para o Traefik
+#   - REGISTRY_PATH=/data/shared/registry
+#     → aparece em /dynamic/shared/registry para o Traefik
+#
+# Uso em Docker Swarm (deploy.mode, deploy.replicas, deploy.placement):
+#   docker stack deploy -c docker-compose.yml <stack_name>
+# ======================================================================
+
+version: '3.8'
+
+services:
+
+  # ------------------------------------------------------------------
+  # sidecar-global — Modo global (1 réplica, manager node)
+  # Gera configurações de abrangência global do cluster (roteamento
+  # entre nós, middlewares compartilhados, regras de hosts globais).
+  # ------------------------------------------------------------------
+  sidecar-global:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - MODE=global
+      - SHARED_OUTPUT_PATH=/data/shared/generated
+      - LOCAL_OUTPUT_PATH=/data/local/generated
+      - REGISTRY_PATH=/data/shared/registry
+      - POLL_INTERVAL=30
+      - LOG_LEVEL=info
+      - PUID=1000
+      - GUID=1000
+    volumes:
+      - sync_data:/data
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+
+  # ------------------------------------------------------------------
+  # sidecar-local — Modo local (global deploy, roda em cada node)
+  # Gera configurações específicas do node local (certificados TLS
+  # locais, regras de host locais, middlewares específicos do node).
+  # ------------------------------------------------------------------
+  sidecar-local:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - MODE=local
+      - SHARED_OUTPUT_PATH=/data/shared/generated
+      - LOCAL_OUTPUT_PATH=/data/local/generated
+      - REGISTRY_PATH=/data/shared/registry
+      - POLL_INTERVAL=10
+      - LOG_LEVEL=info
+      - PUID=1000
+      - GUID=1000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - sync_data:/data
+    deploy:
+      mode: global
+
+volumes:
+  sync_data:
+    driver: local

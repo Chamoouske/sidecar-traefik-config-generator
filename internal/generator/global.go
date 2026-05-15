@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/ajaxl/sidecar/internal/config"
-	"github.com/ajaxl/sidecar/internal/configbuilder"
-	"github.com/ajaxl/sidecar/internal/filewriter"
-	"github.com/ajaxl/sidecar/internal/hostrule"
-	"github.com/ajaxl/sidecar/internal/logger"
-	"github.com/ajaxl/sidecar/internal/middleware"
-	"github.com/ajaxl/sidecar/internal/reconciler"
-	"github.com/ajaxl/sidecar/internal/registry"
+	"github.com/chamoouske/sidecar/internal/config"
+	"github.com/chamoouske/sidecar/internal/configbuilder"
+	"github.com/chamoouske/sidecar/internal/filewriter"
+	"github.com/chamoouske/sidecar/internal/hostrule"
+	"github.com/chamoouske/sidecar/internal/logger"
+	"github.com/chamoouske/sidecar/internal/middleware"
+	"github.com/chamoouske/sidecar/internal/reconciler"
+	"github.com/chamoouske/sidecar/internal/registry"
 )
 
 // GlobalGenerator generates Traefik configuration for global/federation mode.

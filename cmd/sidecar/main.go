@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/ajaxl/sidecar/internal/config"
-	"github.com/ajaxl/sidecar/internal/generator"
-	"github.com/ajaxl/sidecar/internal/logger"
+	"github.com/chamoouske/sidecar/internal/config"
+	"github.com/chamoouske/sidecar/internal/generator"
+	"github.com/chamoouske/sidecar/internal/logger"
 )
 
 func main() {

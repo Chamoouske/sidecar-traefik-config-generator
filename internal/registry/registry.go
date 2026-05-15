@@ -12,7 +12,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ajaxl/sidecar/internal/logger"
+	"github.com/chamoouske/sidecar/internal/logger"
 )
 
 // NodeRegistration representa o registro de um nó no cluster.

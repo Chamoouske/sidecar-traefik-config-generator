@@ -1,4 +1,4 @@
-module github.com/ajaxl/sidecar
+module github.com/chamoouske/sidecar
 
 go 1.26.1
 
