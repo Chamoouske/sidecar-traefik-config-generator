@@ -120,14 +120,20 @@ func (g *LocalGenerator) reconcile(ctx context.Context) {
 			port = overridePort
 		}
 
+		if port == "" {
+			port = "80"
+			logger.Info("container has no exposed port and no traefik.federation.port label, defaulting to port 80",
+				"name", container.Name)
+		}
+
 		containerIP := ""
 		for _, ip := range container.Networks {
 			containerIP = ip
 			break // primeira network
 		}
 
-		if port == "" || containerIP == "" {
-			logger.Warn("container missing port or IP, skipping",
+		if containerIP == "" {
+			logger.Warn("container missing IP, skipping",
 				"name", container.Name, "port", port, "ip", containerIP)
 			continue
 		}
@@ -204,14 +210,20 @@ func (g *LocalGenerator) handleContainer(ctx context.Context, c *docker.Containe
 		port = overridePort
 	}
 
+	if port == "" {
+		port = "80"
+		logger.Info("container has no exposed port and no traefik.federation.port label, defaulting to port 80",
+			"name", c.Name)
+	}
+
 	containerIP := ""
 	for _, ip := range c.Networks {
 		containerIP = ip
 		break
 	}
 
-	if port == "" || containerIP == "" {
-		logger.Warn("container missing port or IP, skipping",
+	if containerIP == "" {
+		logger.Warn("container missing IP, skipping",
 			"name", c.Name, "port", port, "ip", containerIP)
 		return
 	}

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chamoouske/sidecar/internal/logger"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
@@ -73,7 +74,7 @@ func (d *dockerClientImpl) ListContainers(ctx context.Context) ([]ContainerInfo,
 
 	containers := make([]ContainerInfo, 0, len(result.Items))
 	for _, c := range result.Items {
-		containers = append(containers, containerFromSummary(c))
+		containers = append(containers, d.containerFromSummaryWithFallback(ctx, c))
 	}
 	return containers, nil
 }
@@ -133,6 +134,30 @@ func containerFromSummary(c container.Summary) ContainerInfo {
 		Networks:     networks,
 		State:        string(c.State),
 	}
+}
+
+// containerFromSummaryWithFallback tenta containerFromSummary primeiro; se networks vierem
+// vazias (comum em redes bridge com scope swarm), faz inspect individual como fallback.
+func (d *dockerClientImpl) containerFromSummaryWithFallback(ctx context.Context, c container.Summary) ContainerInfo {
+	info := containerFromSummary(c)
+
+	if len(info.Networks) == 0 {
+		name := ""
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+		logger.Debug("container has no networks from summary, falling back to inspect",
+			"container_id", c.ID,
+			"container_name", name,
+		)
+
+		inspectResult, err := d.cli.ContainerInspect(ctx, c.ID, client.ContainerInspectOptions{})
+		if err == nil {
+			info = containerFromInspect(&inspectResult.Container)
+		}
+	}
+
+	return info
 }
 
 // containerFromInspect converte container.InspectResponse em ContainerInfo.
