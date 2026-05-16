@@ -1,0 +1,27 @@
+# Stage 1: Build
+FROM golang:1.26-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$(git describe --tags --always 2>/dev/null || echo dev)" -o /usr/local/bin/agent ./cmd/agent
+
+# Stage 2: Final
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata  su-exec shadow
+
+COPY --from=builder /usr/local/bin/agent /usr/local/bin/agent
+COPY --from=builder /src/scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 9090
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/local/bin/agent", "--config-dir=/etc/traefik-sidecar/local", "--hub-addr=hub:8080", "--agent-port=9090"]

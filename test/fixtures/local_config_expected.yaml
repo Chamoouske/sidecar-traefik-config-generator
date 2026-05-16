@@ -1,0 +1,13 @@
+http:
+    routers:
+        nginx-local-router:
+            rule: Host(`nginx.app.local`)
+            service: nginx-local-service
+            entryPoints:
+                - web
+    services:
+        nginx-local-service:
+            loadBalancer:
+                servers:
+                    - url: http://10.0.0.2:8080
+                passHostHeader: true

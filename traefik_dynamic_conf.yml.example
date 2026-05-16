@@ -1,0 +1,67 @@
+# Estrutura esperada dos diretórios de configuração dinâmica do Traefik (File Provider)
+# ==================================================================================
+#
+# O Traefik monitora continuamente o diretório /etc/traefik/dynamic/ em busca de
+# arquivos .yml/.yaml/.toml. Qualquer alteração é carregada automaticamente sem
+# necessidade de restart (--providers.file.watch=true).
+#
+# /etc/traefik/dynamic/          → diretório monitorado pelo Traefik (providers.file.directory)
+# ├── shared/                    → montagem do volume traefik-shared (gerado pelo Hub)
+# │   ├── federation.yaml        → serviços remotos (http://<node-ip>:80)
+# │   ├── middlewares.yaml       → middlewares globais
+# │   └── tls.yaml               → certificados TLS (opcional)
+# └── local/                     → montagem do volume traefik-local (gerado pelo Agente)
+#     ├── routers.yaml           → routers locais (cascata ou bridge)
+#     └── services.yaml          → serviços locais (bridge IP)
+#
+# Os diretórios 'shared' e 'local' são volumes nomeados definidos no docker-compose.yml:
+#   - traefik-shared: volume compartilhado entre Hub e Traefik (escrita pelo Hub, leitura pelo Traefik)
+#   - traefik-local:  volume compartilhado entre Agente e Traefik (escrita pelo Agente, leitura pelo Traefik)
+#
+# O Hub gera as configurações de federação (conexão entre nós) e middlewares globais.
+# O Agente gera as configurações locais (routers e services do nó atual).
+#
+# --- Exemplo: federation.yaml ---
+# http:
+#   routers:
+#     federation-router:
+#       rule: "Host(`app.internal`)"
+#       service: federation-service
+#       entryPoints:
+#         - web
+#   services:
+#     federation-service:
+#       loadBalancer:
+#         servers:
+#           - url: "http://<remote-node-ip>:80"
+#
+# --- Exemplo: routers.yaml (local) ---
+# http:
+#   routers:
+#     app-router:
+#       rule: "Host(`app.local`)"
+#       service: app-service
+#       entryPoints:
+#         - web
+#
+# --- Exemplo: services.yaml (local) ---
+# http:
+#   services:
+#     app-service:
+#       loadBalancer:
+#         servers:
+#           - url: "http://<container-bridge-ip>:3000"
+#
+# --- Exemplo: middlewares.yaml ---
+# http:
+#   middlewares:
+#     rate-limit:
+#       rateLimit:
+#         average: 100
+#         burst: 50
+#
+# --- Exemplo: tls.yaml ---
+# tls:
+#   certificates:
+#     - certFile: /etc/traefik/certs/cert.pem
+#       keyFile: /etc/traefik/certs/key.pem

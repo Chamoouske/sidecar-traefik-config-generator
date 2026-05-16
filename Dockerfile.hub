@@ -1,0 +1,30 @@
+# Stage 1: Build
+FROM golang:1.26-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /src
+
+# Cache de dependências
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Código fonte
+COPY . .
+
+# Build com CGO_ENABLED=0 para binário estático
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$(git describe --tags --always 2>/dev/null || echo dev)" -o /usr/local/bin/hub ./cmd/hub
+
+# Stage 2: Final (alpine mínimo)
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata  su-exec shadow
+
+COPY --from=builder /usr/local/bin/hub /usr/local/bin/hub
+COPY --from=builder /src/scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 8080
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/local/bin/hub", "--config-dir=/etc/traefik-sidecar/shared", "--hub-addr=:8080"]
