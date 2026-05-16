@@ -28,8 +28,12 @@ type Agent struct {
 	configDir   string // diretório local/ para configs
 	stateFile   string // arquivo de estado local
 	bridgeName  string // nome da bridge local
-	hubAddr     string // endereço do Hub (ex: "192.168.1.10:8080")
+	hubAddr     string // endereço do Hub (ex: "192.168.1.10:8080") - fallback DNS
 	traefikPort int    // porta do Traefik (80)
+
+	// NOVO: endereço do hub recebido via notificação (IP real, substitui DNS)
+	hubAddrFromHub string
+	hubAddrMu      sync.RWMutex // mutex específico para hubAddrFromHub
 
 	containerDisc *discovery.ContainerResolver
 	generator     *config.Generator
@@ -188,6 +192,21 @@ func (a *Agent) Stop() error {
 	return nil
 }
 
+// getEffectiveHubAddr retorna o endereço do hub a ser usado nas chamadas pull.
+// Prioridade:
+// 1. Endereço recebido via notify (hubAddrFromHub) - IP real
+// 2. Endereço configurado via flag/env (hubAddr) - fallback DNS
+func (a *Agent) getEffectiveHubAddr() string {
+	a.hubAddrMu.RLock()
+	fromHub := a.hubAddrFromHub
+	a.hubAddrMu.RUnlock()
+
+	if fromHub != "" {
+		return fromHub
+	}
+	return a.hubAddr
+}
+
 // handleNotification é chamado quando chega POST /notify do Hub.
 // Faz pull seletivo (GET /services/<name> ou GET /state) e regera configs.
 // Executa de forma síncrona — o AgentServer já chama em goroutine separada.
@@ -196,7 +215,21 @@ func (a *Agent) handleNotification(payload *models.NotificationPayload) error {
 		"action":       payload.Action,
 		"service_name": payload.ServiceName,
 		"node_id":      payload.NodeID,
+		"hub_addr":     payload.HubAddr,
 	}).Debug("received notification from hub")
+
+	// NOVO: Atualiza o endereço do hub se veio na notificação
+	if payload.HubAddr != "" {
+		a.hubAddrMu.Lock()
+		if a.hubAddrFromHub != payload.HubAddr {
+			a.logger.WithFields(logrus.Fields{
+				"old_hub_addr": a.hubAddrFromHub,
+				"new_hub_addr": payload.HubAddr,
+			}).Info("hub address updated from notification")
+			a.hubAddrFromHub = payload.HubAddr
+		}
+		a.hubAddrMu.Unlock()
+	}
 
 	switch payload.Action {
 	case models.ActionCreate, models.ActionUpdate:
@@ -366,25 +399,29 @@ func (a *Agent) loadPreviousMergedConfig() *models.TraefikConfig {
 }
 
 // pullServiceFromHub faz GET /services/<name> no Hub.
+// Usa getEffectiveHubAddr() para priorizar IP recebido via notify sobre DNS configurado.
 func (a *Agent) pullServiceFromHub(serviceName string) (*models.ServiceMeta, error) {
 	ctx, cancel := context.WithTimeout(a.ctx, 10*time.Second)
 	defer cancel()
 
-	meta, err := a.hubClient.GetService(ctx, a.hubAddr, serviceName)
+	hubAddr := a.getEffectiveHubAddr()
+	meta, err := a.hubClient.GetService(ctx, hubAddr, serviceName)
 	if err != nil {
-		return nil, fmt.Errorf("hub get service %s from %s: %w", serviceName, a.hubAddr, err)
+		return nil, fmt.Errorf("hub get service %s from %s: %w", serviceName, hubAddr, err)
 	}
 	return meta, nil
 }
 
 // pullStateFromHub faz GET /state no Hub.
+// Usa getEffectiveHubAddr() para priorizar IP recebido via notify sobre DNS configurado.
 func (a *Agent) pullStateFromHub() (*models.ClusterState, error) {
 	ctx, cancel := context.WithTimeout(a.ctx, 10*time.Second)
 	defer cancel()
 
-	state, err := a.hubClient.GetState(ctx, a.hubAddr)
+	hubAddr := a.getEffectiveHubAddr()
+	state, err := a.hubClient.GetState(ctx, hubAddr)
 	if err != nil {
-		return nil, fmt.Errorf("hub get state from %s: %w", a.hubAddr, err)
+		return nil, fmt.Errorf("hub get state from %s: %w", hubAddr, err)
 	}
 	return state, nil
 }

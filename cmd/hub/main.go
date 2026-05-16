@@ -26,6 +26,12 @@ func main() {
 	traefikPort := flag.Int("traefik-port", envOrDefaultInt("TRAEFIK_SIDECAR_TRAEFIK_PORT", 80), "Porta do Traefik no nó remoto")
 	bridgeName := flag.String("bridge-name", envOrDefault("TRAEFIK_SIDECAR_BRIDGE_NAME", "traefik_bridge"), "Nome da bridge local")
 	hubAddr := flag.String("hub-addr", envOrDefault("TRAEFIK_SIDECAR_HUB_ADDR", ":8080"), "Endereço do servidor HTTP do Hub")
+
+	// NOVA flag: endereço IP:porta para anunciar aos agentes (substitui DNS)
+	advertiseAddr := flag.String("advertise-addr",
+		envOrDefault("TRAEFIK_SIDECAR_HUB_ADVERTISE_ADDR", ""),
+		"Endereço IP:porta para anunciar aos agentes (ex: 10.0.0.5:8080). Se vazio, tenta auto-descoberta via Docker Swarm API.")
+
 	dockerHost := flag.String("docker-host", envOrDefault("TRAEFIK_SIDECAR_DOCKER_HOST", "unix:///var/run/docker.sock"), "Docker socket host")
 	logLevel := flag.String("log-level", envOrDefault("TRAEFIK_SIDECAR_LOG_LEVEL", "info"), "Nível de log (debug, info, warn, error)")
 	showVersion := flag.Bool("version", false, "Exibe versão e sai")
@@ -55,14 +61,15 @@ func main() {
 
 	// Startup info
 	logger.WithFields(logrus.Fields{
-		"version":      version,
-		"config_dir":   *configDir,
-		"state_file":   *stateFile,
-		"traefik_port": *traefikPort,
-		"bridge_name":  *bridgeName,
-		"hub_addr":     *hubAddr,
-		"docker_host":  *dockerHost,
-		"log_level":    *logLevel,
+		"version":        version,
+		"config_dir":     *configDir,
+		"state_file":     *stateFile,
+		"traefik_port":   *traefikPort,
+		"bridge_name":    *bridgeName,
+		"hub_addr":       *hubAddr,
+		"advertise_addr": *advertiseAddr,
+		"docker_host":    *dockerHost,
+		"log_level":      *logLevel,
 	}).Info("starting traefik-sidecar Hub")
 
 	// DOCKER CLIENT
@@ -86,6 +93,7 @@ func main() {
 		*traefikPort,
 		*bridgeName,
 		*hubAddr,
+		*advertiseAddr,
 		dockerClient,
 	)
 

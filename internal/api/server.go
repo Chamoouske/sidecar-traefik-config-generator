@@ -104,10 +104,6 @@ func (s *AgentServer) handleNotify(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "action is required")
 		return
 	}
-	if payload.ServiceName == "" {
-		respondError(w, http.StatusBadRequest, "service_name is required")
-		return
-	}
 
 	// Processa em goroutine separada para não bloquear a resposta
 	go func() {
@@ -199,6 +195,11 @@ func (s *HubServer) Start(ctx context.Context) error {
 func (s *HubServer) Stop(ctx context.Context) error {
 	s.logger.Info("stopping hub server")
 	return s.server.Shutdown(ctx)
+}
+
+// Addr retorna o endereço configurado do servidor (ex: ":8080").
+func (s *HubServer) Addr() string {
+	return s.addr
 }
 
 // Port retorna a porta real em que o servidor está escutando.

@@ -111,7 +111,11 @@ func TestAgentServer_HandleNotify_MissingAction(t *testing.T) {
 }
 
 func TestAgentServer_HandleNotify_MissingServiceName(t *testing.T) {
-	server := NewAgentServer(":0", nil, nil)
+	notified := make(chan *models.NotificationPayload, 1)
+	server := NewAgentServer(":0", func(p *models.NotificationPayload) error {
+		notified <- p
+		return nil
+	}, nil)
 
 	payload := &models.NotificationPayload{
 		Action: models.ActionUpdate,
@@ -123,12 +127,20 @@ func TestAgentServer_HandleNotify_MissingServiceName(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	server.handleNotify(w, req)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 
 	var resp map[string]string
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
-	assert.Contains(t, resp["error"], "service_name")
+	assert.Equal(t, "accepted", resp["status"])
+
+	select {
+	case p := <-notified:
+		assert.Equal(t, models.ActionUpdate, p.Action)
+		assert.Equal(t, "", p.ServiceName)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for notification")
+	}
 }
 
 func TestAgentServer_HandleStatus(t *testing.T) {

@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -106,6 +109,13 @@ type Hub struct {
 	agentRegistry map[string]*models.AgentState // agentes registrados (nodeID -> state)
 	clusterState  *models.ClusterState          // estado completo do cluster
 
+	// NOVO: endereço que o hub informará aos agentes (IP:porta)
+	// Preenchido na inicialização via descoberta de IP ou flag --advertise-addr
+	hubAddrForAgents string
+
+	// NOVO: valor da flag --advertise-addr (pode ser vazio = auto-descoberta)
+	advertiseAddr string
+
 	eventCh  <-chan *models.ClusterEvent // eventos do watcher
 	pollerCh <-chan *models.ClusterEvent // eventos do poller
 
@@ -131,6 +141,7 @@ func NewHub(
 	traefikPort int,
 	bridgeName string,
 	hubAddr string, // endereço para o servidor HTTP do hub
+	advertiseAddr string, // NOVO: endereço IP:porta para anunciar aos agentes (vazio = auto-descoberta)
 	dockerClient client.APIClient,
 ) *Hub {
 	// 1. Cria resolvers
@@ -154,22 +165,24 @@ func NewHub(
 	hc := api.NewHubClient()
 
 	hub := &Hub{
-		configDir:     configDir,
-		stateFile:     stateFile,
-		traefikPort:   traefikPort,
-		bridgeName:    bridgeName,
-		nodeDisc:      nodeDisc,
-		containerDisc: containerDisc,
-		eventWatcher:  watcher,
-		servicePoller: poller,
-		generator:     gen,
-		diffEngine:    diff,
-		stateManager:  sm,
-		writer:        w,
-		hubClient:     hc,
-		agentRegistry: make(map[string]*models.AgentState),
-		clusterState:  models.NewClusterState(),
-		logger:        logrus.WithField("component", "hub"),
+		configDir:        configDir,
+		stateFile:        stateFile,
+		traefikPort:      traefikPort,
+		bridgeName:       bridgeName,
+		nodeDisc:         nodeDisc,
+		containerDisc:    containerDisc,
+		eventWatcher:     watcher,
+		servicePoller:    poller,
+		generator:        gen,
+		diffEngine:       diff,
+		stateManager:     sm,
+		writer:           w,
+		hubClient:        hc,
+		hubAddrForAgents: "", // será preenchido no Start()
+		advertiseAddr:    advertiseAddr,
+		agentRegistry:    make(map[string]*models.AgentState),
+		clusterState:     models.NewClusterState(),
+		logger:           logrus.WithField("component", "hub"),
 	}
 
 	// HubServer callbacks apontam para métodos do Hub
@@ -179,43 +192,54 @@ func NewHub(
 }
 
 // Start inicializa todos os componentes do Hub:
-// 1. Carrega estado anterior do disco
-// 2. Inicializa event watcher + poller
-// 3. Inicia event loop principal que processa eventos
-// 4. Inicia servidor HTTP do Hub
-// 5. Inicia ticker para verificação periódica de agentes offline
+// 1. Descobre o endereço do hub a ser anunciado aos agentes
+// 2. Carrega estado anterior do disco
+// 3. Inicializa event watcher + poller
+// 4. Inicia event loop principal que processa eventos
+// 5. Inicia servidor HTTP do Hub
+// 6. Inicia ticker para verificação periódica de agentes offline
 func (h *Hub) Start(ctx context.Context) error {
 	h.ctx, h.cancel = context.WithCancel(ctx)
 
-	// 1. Carrega estado anterior
+	// 0. Inicia servidor HTTP primeiro para podermos obter a porta real
+	if err := h.hubServer.Start(h.ctx); err != nil {
+		return fmt.Errorf("start hub server: %w", err)
+	}
+
+	// 1. Descobre o IP a ser anunciado aos agentes
+	// Extrai a porta do hubServer addr (ex: ":8080" → 8080)
+	_, portStr, _ := net.SplitHostPort(h.hubServer.Addr())
+	serverPort := 8080
+	if p, err := strconv.Atoi(portStr); err == nil {
+		serverPort = p
+	}
+	h.hubAddrForAgents = h.discoverHubAddr(h.advertiseAddr, serverPort)
+	h.logger.WithField("hub_addr_for_agents", h.hubAddrForAgents).Info("hub address for agents resolved")
+
+	// 2. Carrega estado anterior
 	if err := h.stateManager.LoadState(); err != nil {
 		h.logger.WithError(err).Warn("failed to load previous state, continuing with empty state")
 	}
 
-	// 2. Descobre agentes ativos
+	// 3. Descobre agentes ativos
 	h.discoverAgents()
 
-	// 3. Inicia event watcher
+	// 4. Inicia event watcher
 	if err := h.eventWatcher.Start(h.ctx); err != nil {
 		return fmt.Errorf("start event watcher: %w", err)
 	}
 	h.eventCh = h.eventWatcher.Events()
 
-	// 4. Inicia service poller
+	// 5. Inicia service poller
 	pollerCh, err := h.servicePoller.Start(h.ctx)
 	if err != nil {
 		return fmt.Errorf("start service poller: %w", err)
 	}
 	h.pollerCh = pollerCh
 
-	// 5. Inicia event loop
+	// 6. Inicia event loop
 	h.wg.Add(1)
 	go h.eventLoop()
-
-	// 6. Inicia servidor HTTP do Hub
-	if err := h.hubServer.Start(h.ctx); err != nil {
-		return fmt.Errorf("start hub server: %w", err)
-	}
 
 	// 7. Inicia heartbeat loop
 	h.wg.Add(1)
@@ -471,6 +495,56 @@ func (h *Hub) handleEventNodeUpdate(event *models.ClusterEvent) {
 }
 
 // =============================================================================
+// Hub Address Discovery
+// =============================================================================
+
+// discoverHubAddr descobre o endereço IP:porta que o Hub deve anunciar aos agentes.
+// Estratégia (em ordem de precedência):
+// 1. Se advertiseAddr foi fornecido (flag/env), usa esse valor
+// 2. Tenta obter o IP do nó manager via Docker Swarm API
+// 3. Fallback: usa localhost (para ambientes dev/test)
+func (h *Hub) discoverHubAddr(advertiseAddr string, serverPort int) string {
+	// 1. Flag explícita tem maior prioridade
+	if advertiseAddr != "" {
+		return advertiseAddr
+	}
+
+	// 2. Tenta via Docker Swarm API (descobre o IP do nó atual)
+	nodeID, err := h.getCurrentNodeID()
+	if err == nil && nodeID != "" {
+		nodeIP, err := h.nodeDisc.GetNodeIP(context.Background(), nodeID)
+		if err == nil && nodeIP != "" {
+			return fmt.Sprintf("%s:%d", nodeIP, serverPort)
+		}
+	}
+
+	// 3. Fallback: usa resolução de DNS local (para ambientes dev/test)
+	return fmt.Sprintf("localhost:%d", serverPort)
+}
+
+// getCurrentNodeID obtém o ID do nó Swarm onde este container está rodando.
+func (h *Hub) getCurrentNodeID() (string, error) {
+	// Usa hostname para encontrar o nó atual
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+
+	nodes, err := h.nodeDisc.ListNodes(context.Background())
+	if err != nil {
+		return "", err
+	}
+
+	for _, n := range nodes {
+		if n.Hostname == hostname || strings.HasSuffix(hostname, n.Hostname) {
+			return n.ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("current node not found in swarm")
+}
+
+// =============================================================================
 // Federation
 // =============================================================================
 
@@ -604,13 +678,19 @@ func (h *Hub) notifyAgents(payload *models.NotificationPayload) {
 }
 
 // notifyAgentWithRetry tenta notificar um agente com backoff exponencial.
+// Inclui o HubAddr no payload para que o agente use IP em vez de DNS.
 func (h *Hub) notifyAgentWithRetry(agent *models.AgentState, payload *models.NotificationPayload) {
 	const maxRetries = 3
 	const baseDelay = 1 * time.Second
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		addr := fmt.Sprintf("%s:%d", agent.Addr, agent.Port)
-		err := h.hubClient.NotifyAgent(h.ctx, addr, payload)
+
+		// Garante que o HubAddr está preenchido no payload
+		enrichedPayload := *payload // cópia shallow
+		enrichedPayload.HubAddr = h.hubAddrForAgents
+
+		err := h.hubClient.NotifyAgent(h.ctx, addr, &enrichedPayload)
 		if err == nil {
 			h.mu.Lock()
 			agent.LastSeen = time.Now()

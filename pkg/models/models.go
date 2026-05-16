@@ -172,6 +172,7 @@ type NotificationPayload struct {
 	Action      ActionType `json:"action" yaml:"action"`
 	ServiceName string     `json:"service_name" yaml:"service_name"`
 	NodeID      string     `json:"node_id,omitempty" yaml:"node_id,omitempty"`
+	HubAddr     string     `json:"hub_addr,omitempty" yaml:"hub_addr,omitempty"` // NOVO: IP:porta do Hub para os agentes usarem em vez de DNS
 	Timestamp   time.Time  `json:"timestamp" yaml:"timestamp"`
 }
 
