@@ -26,37 +26,57 @@ func NewContainerResolver(client client.APIClient, bridgeName string) *Container
 	}
 }
 
-// GetContainerBridgeIP retorna o IP do container na bridge especificada.
-// Usa NetworkSettings.Networks[bridgeName].IPAddress.
+// GetContainerBridgeIP retorna o IP do container.
+// Se bridgeName for fornecido, tenta buscar nela primeiro.
+// Caso contrário, retorna o IP da primeira rede disponível.
 func (r *ContainerResolver) GetContainerBridgeIP(ctx context.Context, containerID string) (string, error) {
 	insp, err := r.client.ContainerInspect(ctx, containerID)
 	if err != nil {
 		return "", fmt.Errorf("failed to inspect container %s: %w", containerID, err)
 	}
 
-	if insp.NetworkSettings == nil {
+	if insp.NetworkSettings == nil || len(insp.NetworkSettings.Networks) == 0 {
 		return "", nil
 	}
 
-	ep, ok := insp.NetworkSettings.Networks[r.bridgeName]
-	if !ok || ep == nil {
-		return "", nil
+	// 1. Tenta a bridge específica se configurada
+	if r.bridgeName != "" {
+		if ep, ok := insp.NetworkSettings.Networks[r.bridgeName]; ok && ep != nil && ep.IPAddress != "" {
+			return ep.IPAddress, nil
+		}
 	}
 
-	return ep.IPAddress, nil
+	// 2. Fallback: Pega a primeira rede com IP
+	for _, ep := range insp.NetworkSettings.Networks {
+		if ep != nil && ep.IPAddress != "" {
+			return ep.IPAddress, nil
+		}
+	}
+
+	return "", nil
 }
 
-// localIPFromSummary tenta obter o IP na bridge diretamente do summary do container
-// (evita uma chamada extra de inspect quando possível).
+// localIPFromSummary tenta obter o IP de qualquer rede disponível no summary do container.
 func (r *ContainerResolver) localIPFromSummary(summary container.Summary) string {
-	if summary.NetworkSettings == nil {
+	if summary.NetworkSettings == nil || len(summary.NetworkSettings.Networks) == 0 {
 		return ""
 	}
-	ep, ok := summary.NetworkSettings.Networks[r.bridgeName]
-	if !ok || ep == nil {
-		return ""
+
+	// 1. Tenta a bridge específica
+	if r.bridgeName != "" {
+		if ep, ok := summary.NetworkSettings.Networks[r.bridgeName]; ok && ep != nil && ep.IPAddress != "" {
+			return ep.IPAddress
+		}
 	}
-	return ep.IPAddress
+
+	// 2. Fallback: Pega a primeira rede com IP
+	for _, ep := range summary.NetworkSettings.Networks {
+		if ep != nil && ep.IPAddress != "" {
+			return ep.IPAddress
+		}
+	}
+
+	return ""
 }
 
 const (

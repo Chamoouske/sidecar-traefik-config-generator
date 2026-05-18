@@ -27,6 +27,55 @@ func NewAtomicWriter() *AtomicWriter {
 }
 
 // WriteConfig serializa config em YAML e escreve atomicamente.
+// 1. Se config.HTTP.Routers tiver conteúdo, escreve em routersDir/name.yaml
+// 2. Se config.HTTP.Services tiver conteúdo, escreve em servicesDir/name.yaml
+// name é o nome do serviço (sem extensão).
+func (w *AtomicWriter) WriteServiceConfig(configDir string, name string, config *models.TraefikConfig) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if config == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	// 1. Escreve Routers se houver
+	if config.HTTP != nil && len(config.HTTP.Routers) > 0 {
+		path := filepath.Join(configDir, "routers", name+".yaml")
+		routerCfg := &models.TraefikConfig{
+			HTTP: &models.HTTPConfig{
+				Routers: config.HTTP.Routers,
+			},
+		}
+		data, err := yaml.Marshal(routerCfg)
+		if err != nil {
+			return fmt.Errorf("failed to marshal routers config for %s: %w", name, err)
+		}
+		if err := w.writeAtomic(path, data); err != nil {
+			return err
+		}
+	}
+
+	// 2. Escreve Services se houver
+	if config.HTTP != nil && len(config.HTTP.Services) > 0 {
+		path := filepath.Join(configDir, "services", name+".yaml")
+		serviceCfg := &models.TraefikConfig{
+			HTTP: &models.HTTPConfig{
+				Services: config.HTTP.Services,
+			},
+		}
+		data, err := yaml.Marshal(serviceCfg)
+		if err != nil {
+			return fmt.Errorf("failed to marshal services config for %s: %w", name, err)
+		}
+		if err := w.writeAtomic(path, data); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// WriteConfig serializa config em YAML e escreve atomicamente.
 // 1. Cria arquivo temporário no mesmo diretório.
 // 2. Serializa config com yaml.Marshal.
 // 3. Escreve no tempfile.

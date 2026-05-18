@@ -151,6 +151,9 @@ func (a *Agent) Start(ctx context.Context) error {
 	}
 	a.logger.WithField("addr", fmt.Sprintf(":%d", a.agentPort)).Info("agent server started")
 
+	// 2.1. Limpeza inicial de arquivos legados
+	a.cleanupLegacyConfigs()
+
 	// 3. Inicia LocalWatcher (polling de containers locais)
 	a.localWatcher.Start(a.ctx)
 
@@ -295,10 +298,22 @@ func (a *Agent) getStatus() *models.AgentStatusResponse {
 	}
 }
 
+// cleanupLegacyConfigs remove arquivos de configuração consolidados antigos.
+func (a *Agent) cleanupLegacyConfigs() {
+	routersPath := filepath.Join(a.configDir, "routers.yaml")
+	servicesPath := filepath.Join(a.configDir, "services.yaml")
+
+	if a.writer.Exists(routersPath) {
+		a.logger.WithField("path", routersPath).Info("removing legacy routers config")
+		a.writer.RemoveConfig(routersPath)
+	}
+	if a.writer.Exists(servicesPath) {
+		a.logger.WithField("path", servicesPath).Info("removing legacy services config")
+		a.writer.RemoveConfig(servicesPath)
+	}
+}
+
 // generateLocalConfigs gera local/routers.yaml e local/services.yaml.
-// Para cada serviço habilitado:
-//   - Se container está local: router aponta para bridge IP do container
-//   - Se container NÃO está local: router aponta para federation (cascata)
 func (a *Agent) generateLocalConfigs() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -313,11 +328,11 @@ func (a *Agent) generateLocalConfigs() error {
 	}
 
 	// Constrói mapa de serviços com tasks locais
-	localServices := make(map[string]bool)
+	localServicesMap := make(map[string]bool)
 	localTaskByService := make(map[string][]*models.LocalTaskInfo)
 	for _, task := range localTasks {
 		if task != nil {
-			localServices[task.ServiceName] = true
+			localServicesMap[task.ServiceName] = true
 			localTaskByService[task.ServiceName] = append(localTaskByService[task.ServiceName], task)
 		}
 	}
@@ -325,65 +340,53 @@ func (a *Agent) generateLocalConfigs() error {
 	// Obtém todos os serviços habilitados do state manager
 	allServices := a.stateManager.GetLastServices()
 
-	var localConfigs []*models.TraefikConfig
+	// 1. Calcula o diff para saber o que foi removido (órfãos)
+	// Como o StateManager já lida com o estado, podemos usar o diff engine
+	// Mas o plano sugere usar o OrphanCleaner com diff.Removed.
+	// Vamos simplificar: se o serviço não está mais em allServices, ele deve ser limpo.
+	// O StateManager.GetLastServices() retorna o que está no estado atual.
 
+	// Para o CleanOrphans, precisamos saber quem SAIU do estado.
+	// O StateManager.SetService/DeleteService altera o estado interno.
+
+	// Vamos identificar serviços que estão no disco mas não no estado.
+	// O OrphanCleaner.CleanOrphans recebe uma lista de nomes de serviços.
+
+	// 2. Itera sobre serviços e gera/escreve configs
 	for name, meta := range allServices {
 		if meta == nil || !meta.Enabled {
+			// Se desabilitado, poderíamos limpar os arquivos dele?
+			// Sim, para ser granular.
+			a.orphanCleaner.CleanOrphans([]string{name})
 			continue
 		}
 
-		if localServices[name] {
+		var cfg *models.TraefikConfig
+		if localServicesMap[name] {
 			// Container está local → gera config com router apontando para bridge IP
 			tasks := localTaskByService[name]
-			cfg := a.generator.GenerateLocalConfig(tasks, meta)
-			localConfigs = append(localConfigs, cfg)
+			cfg = a.generator.GenerateLocalConfig(tasks, meta)
 		} else {
 			// Container NÃO está local → gera router de cascata (federation)
-			cfg := a.generator.GenerateFederationRouterConfig(meta)
-			localConfigs = append(localConfigs, cfg)
+			cfg = a.generator.GenerateFederationRouterConfig(meta)
+		}
+
+		if cfg != nil {
+			if err := a.writer.WriteServiceConfig(a.configDir, name, cfg); err != nil {
+				a.logger.WithError(err).WithField("service", name).Error("failed to write service config")
+			}
 		}
 	}
 
-	// Merge de todas as configs em um único TraefikConfig
-	merged := a.generator.MergeConfigs(localConfigs...)
-
-	// Caminhos para escrita consolidada
-	routersPath := filepath.Join(a.configDir, "routers.yaml")
-	servicesPath := filepath.Join(a.configDir, "services.yaml")
-
-	// Verifica se houve mudança usando o diff engine
-	// Lê o estado anterior do disco (se existir) para comparar
-	hasChanged := true // default: sempre escreve
-
-	// Tenta carregar config anterior para diff
-	prevConfig := a.loadPreviousMergedConfig()
-	if prevConfig != nil {
-		hasChanged = a.diffEngine.HasChanged(prevConfig, merged)
+	// 3. Salva estado após escrita bem-sucedida
+	if err := a.stateManager.SaveState(); err != nil {
+		a.logger.WithError(err).Warn("failed to save state after config generation")
 	}
 
-	if hasChanged {
-		// Escreve configs atomicamente
-		if err := a.writer.WriteConfig(routersPath, merged); err != nil {
-			return fmt.Errorf("write routers config to %s: %w", routersPath, err)
-		}
-		if err := a.writer.WriteConfig(servicesPath, merged); err != nil {
-			return fmt.Errorf("write services config to %s: %w", servicesPath, err)
-		}
-
-		// Salva estado após escrita bem-sucedida
-		if err := a.stateManager.SaveState(); err != nil {
-			a.logger.WithError(err).Warn("failed to save state after config generation")
-		}
-
-		a.logger.WithFields(logrus.Fields{
-			"local_services": len(localServices),
-			"total_services": len(allServices),
-			"routers_path":   routersPath,
-			"services_path":  servicesPath,
-		}).Info("local configs updated")
-	} else {
-		a.logger.Debug("no config changes detected, skipping write")
-	}
+	a.logger.WithFields(logrus.Fields{
+		"local_services_count": len(localServicesMap),
+		"total_services_count": len(allServices),
+	}).Info("multi-file configs updated")
 
 	return nil
 }

@@ -102,8 +102,8 @@ services:
     environment:
       PUID: 1000
       GUID: 1000
-      TRAEFIK_SIDECAR_CONFIG_DIR: /etc/traefik-sidecar/local
-      TRAEFIK_SIDECAR_BRIDGE_NAME: traefik_bridge
+      TRAEFIK_SIDECAR_CONFIG_DIR: /etc/traefik-sidecar/shared/local
+      TRAEFIK_SIDECAR_BRIDGE_NAME: ""  # Desabilitado conforme solicitado
       TRAEFIK_SIDECAR_HUB_ADDR: hub:8080
       TRAEFIK_SIDECAR_AGENT_PORT: 9090
       TRAEFIK_SIDECAR_TRAEFIK_PORT: 80

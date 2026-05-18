@@ -10,6 +10,51 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAtomicWriter_WriteServiceConfig(t *testing.T) {
+	dir := t.TempDir()
+	w := NewAtomicWriter()
+
+	config := &models.TraefikConfig{
+		HTTP: &models.HTTPConfig{
+			Routers: map[string]*models.RouterConfig{
+				"test-router": {
+					Rule:    "Host(`test.local`)",
+					Service: "test-service",
+				},
+			},
+			Services: map[string]*models.ServiceConfig{
+				"test-service": {
+					LoadBalancer: &models.LoadBalancerConfig{
+						Servers: []*models.ServerConfig{
+							{URL: "http://10.0.0.1:80"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := w.WriteServiceConfig(dir, "my-service", config)
+	require.NoError(t, err)
+
+	// Verifica que os arquivos foram criados nos subdiretórios
+	routerPath := filepath.Join(dir, "routers", "my-service.yaml")
+	servicePath := filepath.Join(dir, "services", "my-service.yaml")
+
+	assert.True(t, w.Exists(routerPath))
+	assert.True(t, w.Exists(servicePath))
+
+	// Verifica conteúdo do router
+	data, _ := os.ReadFile(routerPath)
+	assert.Contains(t, string(data), "test-router")
+	assert.Contains(t, string(data), "test-service")
+
+	// Verifica conteúdo do service
+	data, _ = os.ReadFile(servicePath)
+	assert.Contains(t, string(data), "test-service")
+	assert.Contains(t, string(data), "http://10.0.0.1:80")
+}
+
 func TestAtomicWriter_New(t *testing.T) {
 	w := NewAtomicWriter()
 	assert.NotNil(t, w)
