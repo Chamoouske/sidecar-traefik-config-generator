@@ -186,7 +186,13 @@ func NewHub(
 	}
 
 	// HubServer callbacks apontam para métodos do Hub
-	hub.hubServer = api.NewHubServer(hubAddr, hub.getState, hub.lookupService)
+	hub.hubServer = api.NewHubServer(
+		hubAddr,
+		hub.getState,
+		hub.lookupService,
+		hub.getSharedFederation,
+		hub.getSharedMiddlewares,
+	)
 
 	return hub
 }
@@ -963,4 +969,22 @@ func (h *Hub) getState() *models.ClusterState {
 // lookupService busca metadata de serviço pelo nome.
 func (h *Hub) lookupService(name string) (*models.ServiceMeta, bool) {
 	return h.stateManager.GetService(name)
+}
+
+// getSharedFederation retorna o TraefikConfig de federação atual.
+func (h *Hub) getSharedFederation() *models.TraefikConfig {
+	targets := h.stateManager.GetLastFederation()
+	return h.generator.GenerateFederationConfig(targets)
+}
+
+// getSharedMiddlewares retorna o TraefikConfig de middlewares atual.
+func (h *Hub) getSharedMiddlewares() *models.TraefikConfig {
+	services := h.stateManager.GetLastServices()
+	mwServices := make(map[string]*models.ServiceMeta)
+	for name, meta := range services {
+		if meta != nil && meta.Enabled && len(meta.Middlewares) > 0 {
+			mwServices[name] = meta
+		}
+	}
+	return h.generator.GenerateMiddlewareConfig(mwServices)
 }

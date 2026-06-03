@@ -9,6 +9,7 @@ import (
 
 	"github.com/chamoouske/traefik-sidecar/pkg/models"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -136,27 +137,35 @@ func (s *AgentServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 // HubServer é o servidor HTTP do Hub Central.
 // Endpoints:
-// GET  /services/<name> - retorna metadata de um serviço
-// GET  /state           - retorna estado completo do cluster
-// GET  /health          - healthcheck
+// GET  /services/<name>       - retorna metadata de um serviço
+// GET  /state                 - retorna estado completo do cluster
+// GET  /shared/federation     - retorna config de federação (serviços remotos)
+// GET  /shared/middlewares    - retorna config de middlewares globais
+// GET  /health                - healthcheck
 type HubServer struct {
-	addr          string
-	stateManager  func() *models.ClusterState
-	serviceLookup func(name string) (*models.ServiceMeta, bool)
-	server        *http.Server
-	listener      net.Listener
-	logger        *logrus.Entry
+	addr                   string
+	stateManager           func() *models.ClusterState
+	serviceLookup          func(name string) (*models.ServiceMeta, bool)
+	sharedFederationHandler func() *models.TraefikConfig
+	sharedMiddlewaresHandler func() *models.TraefikConfig
+	server                 *http.Server
+	listener               net.Listener
+	logger                 *logrus.Entry
 }
 
 // NewHubServer cria um novo servidor HTTP para o Hub Central.
 func NewHubServer(addr string,
 	stateManager func() *models.ClusterState,
-	serviceLookup func(name string) (*models.ServiceMeta, bool)) *HubServer {
+	serviceLookup func(name string) (*models.ServiceMeta, bool),
+	sharedFederationHandler func() *models.TraefikConfig,
+	sharedMiddlewaresHandler func() *models.TraefikConfig) *HubServer {
 	return &HubServer{
-		addr:          addr,
-		stateManager:  stateManager,
-		serviceLookup: serviceLookup,
-		logger:        logrus.WithField("component", "api.hub-server"),
+		addr:                    addr,
+		stateManager:            stateManager,
+		serviceLookup:           serviceLookup,
+		sharedFederationHandler: sharedFederationHandler,
+		sharedMiddlewaresHandler: sharedMiddlewaresHandler,
+		logger:                  logrus.WithField("component", "api.hub-server"),
 	}
 }
 
@@ -166,6 +175,8 @@ func (s *HubServer) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /services/{name}", s.handleGetService)
 	mux.HandleFunc("GET /state", s.handleGetState)
+	mux.HandleFunc("GET /shared/federation", s.handleSharedFederation)
+	mux.HandleFunc("GET /shared/middlewares", s.handleSharedMiddlewares)
 	mux.HandleFunc("GET /health", s.handleHealth)
 
 	handler := loggingMiddleware(s.logger, mux)
@@ -236,6 +247,36 @@ func (s *HubServer) handleGetState(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, state)
 }
 
+// handleSharedFederation processa GET /shared/federation.
+// Retorna o TraefikConfig de federação (serviços remotos) como YAML.
+func (s *HubServer) handleSharedFederation(w http.ResponseWriter, r *http.Request) {
+	if s.sharedFederationHandler == nil {
+		respondError(w, http.StatusNotFound, "federation handler not available")
+		return
+	}
+	config := s.sharedFederationHandler()
+	if config == nil {
+		respondJSON(w, http.StatusOK, &models.TraefikConfig{})
+		return
+	}
+	respondYAML(w, http.StatusOK, config)
+}
+
+// handleSharedMiddlewares processa GET /shared/middlewares.
+// Retorna o TraefikConfig de middlewares globais como YAML.
+func (s *HubServer) handleSharedMiddlewares(w http.ResponseWriter, r *http.Request) {
+	if s.sharedMiddlewaresHandler == nil {
+		respondError(w, http.StatusNotFound, "middlewares handler not available")
+		return
+	}
+	config := s.sharedMiddlewaresHandler()
+	if config == nil {
+		respondJSON(w, http.StatusOK, &models.TraefikConfig{})
+		return
+	}
+	respondYAML(w, http.StatusOK, config)
+}
+
 // handleHealth processa GET /health.
 // Retorna 200 com {"status": "ok"}.
 func (s *HubServer) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -253,6 +294,19 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		logrus.WithError(err).Error("failed to encode JSON response")
 	}
+}
+
+// respondYAML escreve uma resposta YAML com o status code e dados fornecidos.
+func respondYAML(w http.ResponseWriter, status int, data interface{}) {
+	raw, err := yaml.Marshal(data)
+	if err != nil {
+		logrus.WithError(err).Error("failed to encode YAML response")
+		respondError(w, http.StatusInternalServerError, "failed to encode YAML")
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-yaml")
+	w.WriteHeader(status)
+	w.Write(raw)
 }
 
 // respondError escreve uma resposta de erro JSON.

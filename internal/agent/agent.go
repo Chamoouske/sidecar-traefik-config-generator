@@ -321,6 +321,11 @@ func (a *Agent) generateLocalConfigs() error {
 	ctx, cancel := context.WithTimeout(a.ctx, 10*time.Second)
 	defer cancel()
 
+	// 0. Pull shared configs (federation + middlewares) do Hub
+	if err := a.pullSharedConfigs(ctx); err != nil {
+		a.logger.WithError(err).Warn("failed to pull shared configs from hub, using cached versions")
+	}
+
 	// Lista containers locais na bridge
 	localTasks, err := a.containerDisc.ListLocalContainers(ctx)
 	if err != nil {
@@ -398,6 +403,42 @@ func (a *Agent) loadPreviousMergedConfig() *models.TraefikConfig {
 	// Para diff completo, recarregamos do state manager e regeramos o merged.
 	// Como simplificação, confiamos no diff do stateManager que já compara
 	// os mapas de serviço. Retornamos nil para sempre escrever na primeira vez.
+	return nil
+}
+
+// pullSharedConfigs puxa federation.yaml e middlewares.yaml do Hub e escreve localmente.
+func (a *Agent) pullSharedConfigs(ctx context.Context) error {
+	hubAddr := a.getEffectiveHubAddr()
+
+	// Puxa federation config
+	fedCfg, err := a.hubClient.GetFederationConfig(ctx, hubAddr)
+	if err != nil {
+		return fmt.Errorf("get federation config: %w", err)
+	}
+
+	// Puxa middlewares config
+	mwCfg, err := a.hubClient.GetMiddlewareConfig(ctx, hubAddr)
+	if err != nil {
+		return fmt.Errorf("get middlewares config: %w", err)
+	}
+
+	// Escreve federation.yaml localmente
+	fedPath := filepath.Join(a.configDir, "federation.yaml")
+	if err := a.writer.WriteConfig(fedPath, fedCfg); err != nil {
+		return fmt.Errorf("write federation config: %w", err)
+	}
+
+	// Escreve middlewares.yaml localmente
+	mwPath := filepath.Join(a.configDir, "middlewares.yaml")
+	if err := a.writer.WriteConfig(mwPath, mwCfg); err != nil {
+		return fmt.Errorf("write middlewares config: %w", err)
+	}
+
+	a.logger.WithFields(logrus.Fields{
+		"federation_path": fedPath,
+		"middlewares_path": mwPath,
+	}).Debug("shared configs pulled from hub and written locally")
+
 	return nil
 }
 

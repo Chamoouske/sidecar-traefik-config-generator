@@ -193,13 +193,13 @@ func TestAgentServer_HandleStatus_EmptyStatus(t *testing.T) {
 // =============================================================================
 
 func TestHubServer_New(t *testing.T) {
-	server := NewHubServer(":8080", nil, nil)
+	server := NewHubServer(":8080", nil, nil, nil, nil)
 	assert.NotNil(t, server)
 	assert.Equal(t, ":8080", server.addr)
 }
 
 func TestHubServer_HandleHealth(t *testing.T) {
-	server := NewHubServer(":0", nil, nil)
+	server := NewHubServer(":0", nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -218,10 +218,9 @@ func TestHubServer_HandleGetService_Found(t *testing.T) {
 		return nil, false
 	}
 
-	server := NewHubServer(":0", nil, lookup)
+	server := NewHubServer(":0", nil, lookup, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/services/nginx", nil)
-	// Set path value as the mux would when routing
 	req.SetPathValue("name", "nginx")
 	w := httptest.NewRecorder()
 
@@ -240,7 +239,7 @@ func TestHubServer_HandleGetService_NotFound(t *testing.T) {
 		return nil, false
 	}
 
-	server := NewHubServer(":0", nil, lookup)
+	server := NewHubServer(":0", nil, lookup, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/services/unknown", nil)
 	req.SetPathValue("name", "unknown")
@@ -257,7 +256,7 @@ func TestHubServer_HandleGetService_NotFound(t *testing.T) {
 }
 
 func TestHubServer_HandleGetService_EmptyName(t *testing.T) {
-	server := NewHubServer(":0", nil, nil)
+	server := NewHubServer(":0", nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/services/", nil)
 	req.SetPathValue("name", "")
@@ -282,7 +281,7 @@ func TestHubServer_HandleGetState(t *testing.T) {
 		return state
 	}
 
-	server := NewHubServer(":0", stateManager, nil)
+	server := NewHubServer(":0", stateManager, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/state", nil)
 	w := httptest.NewRecorder()
@@ -555,7 +554,7 @@ func TestAgentServer_StartStop(t *testing.T) {
 }
 
 func TestHubServer_StartStop(t *testing.T) {
-	server := NewHubServer("127.0.0.1:0", nil, nil)
+	server := NewHubServer("127.0.0.1:0", nil, nil, nil, nil)
 
 	err := server.Start(context.Background())
 	require.NoError(t, err)

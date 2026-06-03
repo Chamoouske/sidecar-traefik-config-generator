@@ -321,7 +321,7 @@ func (p *ServicePoller) serviceHash(service swarm.Service) string {
 
 		prefs := spec.TaskTemplate.Placement.Preferences
 		for _, p := range prefs {
-			fmt.Fprintf(hasher, "preference=%s:%s\n", p.Spread.SpreadDescriptor)
+			fmt.Fprintf(hasher, "preference=%s\n", p.Spread.SpreadDescriptor)
 		}
 	}
 

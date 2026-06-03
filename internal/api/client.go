@@ -12,6 +12,7 @@ import (
 
 	"github.com/chamoouske/traefik-sidecar/pkg/models"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -156,6 +157,82 @@ func (c *HubClient) GetState(ctx context.Context, hubAddr string) (*models.Clust
 	}
 
 	return &state, nil
+}
+
+// GetFederationConfig obtém a configuração de federação do Hub.
+// URL: http://<hub-addr>/shared/federation
+// Retorna o TraefikConfig com serviços federados (para Traefik File Provider).
+func (c *HubClient) GetFederationConfig(ctx context.Context, hubAddr string) (*models.TraefikConfig, error) {
+	url := fmt.Sprintf("http://%s/shared/federation", hubAddr)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.logger.WithField("hub_addr", hubAddr).Debug("fetching federation config from hub")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get federation config from hub %s: %w", hubAddr, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("hub %s returned status %d: %s",
+			hubAddr, resp.StatusCode, string(bodyBytes))
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read federation config: %w", err)
+	}
+
+	var config models.TraefikConfig
+	if err := yaml.Unmarshal(raw, &config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal federation config: %w", err)
+	}
+
+	return &config, nil
+}
+
+// GetMiddlewareConfig obtém a configuração de middlewares do Hub.
+// URL: http://<hub-addr>/shared/middlewares
+// Retorna o TraefikConfig com middlewares globais (para Traefik File Provider).
+func (c *HubClient) GetMiddlewareConfig(ctx context.Context, hubAddr string) (*models.TraefikConfig, error) {
+	url := fmt.Sprintf("http://%s/shared/middlewares", hubAddr)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.logger.WithField("hub_addr", hubAddr).Debug("fetching middlewares config from hub")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get middlewares config from hub %s: %w", hubAddr, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("hub %s returned status %d: %s",
+			hubAddr, resp.StatusCode, string(bodyBytes))
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read middlewares config: %w", err)
+	}
+
+	var config models.TraefikConfig
+	if err := yaml.Unmarshal(raw, &config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal middlewares config: %w", err)
+	}
+
+	return &config, nil
 }
 
 // Healthy verifica se o hub está acessível.
