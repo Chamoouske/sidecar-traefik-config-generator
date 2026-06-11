@@ -11,14 +11,15 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$(git describe --tags --always 2>/dev/null || echo dev)" -o /usr/local/bin/hub ./cmd/hub
 
-RUN go install github.com/grpc-ecosystem/grpc-health-probe/cmd/grpc_health_probe@v0.4.36
+RUN GOBIN=/usr/local/bin go install github.com/grpc-ecosystem/grpc-health-probe@v0.4.36 && \
+    mv /usr/local/bin/grpc-health-probe /usr/local/bin/grpc_health_probe 2>/dev/null || true
 
 FROM alpine:3.19
 
 RUN apk add --no-cache ca-certificates tzdata su-exec
 
 COPY --from=builder /usr/local/bin/hub /usr/local/bin/hub
-COPY --from=builder /go/bin/grpc_health_probe /bin/grpc_health_probe
+COPY --from=builder /usr/local/bin/grpc_health_probe /bin/grpc_health_probe
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
