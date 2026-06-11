@@ -21,79 +21,32 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type RouteCommand_Action int32
-
-const (
-	RouteCommand_UPSERT RouteCommand_Action = 0
-	RouteCommand_DELETE RouteCommand_Action = 1
-)
-
-// Enum value maps for RouteCommand_Action.
-var (
-	RouteCommand_Action_name = map[int32]string{
-		0: "UPSERT",
-		1: "DELETE",
-	}
-	RouteCommand_Action_value = map[string]int32{
-		"UPSERT": 0,
-		"DELETE": 1,
-	}
-)
-
-func (x RouteCommand_Action) Enum() *RouteCommand_Action {
-	p := new(RouteCommand_Action)
-	*p = x
-	return p
-}
-
-func (x RouteCommand_Action) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (RouteCommand_Action) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_api_sidecar_proto_enumTypes[0].Descriptor()
-}
-
-func (RouteCommand_Action) Type() protoreflect.EnumType {
-	return &file_internal_api_sidecar_proto_enumTypes[0]
-}
-
-func (x RouteCommand_Action) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use RouteCommand_Action.Descriptor instead.
-func (RouteCommand_Action) EnumDescriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{4, 0}
-}
-
-type AgentToHub struct {
+type PeerMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
 	//
-	//	*AgentToHub_ConnectRequest
-	//	*AgentToHub_Ack
-	//	*AgentToHub_RouteSync
-	//	*AgentToHub_ContainerReport
-	Payload       isAgentToHub_Payload `protobuf_oneof:"payload"`
+	//	*PeerMessage_ConnectRequest
+	//	*PeerMessage_ConnectResponse
+	//	*PeerMessage_ContainerReport
+	Payload       isPeerMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AgentToHub) Reset() {
-	*x = AgentToHub{}
+func (x *PeerMessage) Reset() {
+	*x = PeerMessage{}
 	mi := &file_internal_api_sidecar_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AgentToHub) String() string {
+func (x *PeerMessage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AgentToHub) ProtoMessage() {}
+func (*PeerMessage) ProtoMessage() {}
 
-func (x *AgentToHub) ProtoReflect() protoreflect.Message {
+func (x *PeerMessage) ProtoReflect() protoreflect.Message {
 	mi := &file_internal_api_sidecar_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -105,179 +58,66 @@ func (x *AgentToHub) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AgentToHub.ProtoReflect.Descriptor instead.
-func (*AgentToHub) Descriptor() ([]byte, []int) {
+// Deprecated: Use PeerMessage.ProtoReflect.Descriptor instead.
+func (*PeerMessage) Descriptor() ([]byte, []int) {
 	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *AgentToHub) GetPayload() isAgentToHub_Payload {
+func (x *PeerMessage) GetPayload() isPeerMessage_Payload {
 	if x != nil {
 		return x.Payload
 	}
 	return nil
 }
 
-func (x *AgentToHub) GetConnectRequest() *ConnectRequest {
+func (x *PeerMessage) GetConnectRequest() *ConnectRequest {
 	if x != nil {
-		if x, ok := x.Payload.(*AgentToHub_ConnectRequest); ok {
+		if x, ok := x.Payload.(*PeerMessage_ConnectRequest); ok {
 			return x.ConnectRequest
 		}
 	}
 	return nil
 }
 
-func (x *AgentToHub) GetAck() *AckResponse {
+func (x *PeerMessage) GetConnectResponse() *ConnectResponse {
 	if x != nil {
-		if x, ok := x.Payload.(*AgentToHub_Ack); ok {
-			return x.Ack
-		}
-	}
-	return nil
-}
-
-func (x *AgentToHub) GetRouteSync() *RouteSyncRequest {
-	if x != nil {
-		if x, ok := x.Payload.(*AgentToHub_RouteSync); ok {
-			return x.RouteSync
-		}
-	}
-	return nil
-}
-
-func (x *AgentToHub) GetContainerReport() *ContainerReport {
-	if x != nil {
-		if x, ok := x.Payload.(*AgentToHub_ContainerReport); ok {
-			return x.ContainerReport
-		}
-	}
-	return nil
-}
-
-type isAgentToHub_Payload interface {
-	isAgentToHub_Payload()
-}
-
-type AgentToHub_ConnectRequest struct {
-	ConnectRequest *ConnectRequest `protobuf:"bytes,1,opt,name=connect_request,json=connectRequest,proto3,oneof"`
-}
-
-type AgentToHub_Ack struct {
-	Ack *AckResponse `protobuf:"bytes,2,opt,name=ack,proto3,oneof"`
-}
-
-type AgentToHub_RouteSync struct {
-	RouteSync *RouteSyncRequest `protobuf:"bytes,3,opt,name=route_sync,json=routeSync,proto3,oneof"`
-}
-
-type AgentToHub_ContainerReport struct {
-	ContainerReport *ContainerReport `protobuf:"bytes,4,opt,name=container_report,json=containerReport,proto3,oneof"`
-}
-
-func (*AgentToHub_ConnectRequest) isAgentToHub_Payload() {}
-
-func (*AgentToHub_Ack) isAgentToHub_Payload() {}
-
-func (*AgentToHub_RouteSync) isAgentToHub_Payload() {}
-
-func (*AgentToHub_ContainerReport) isAgentToHub_Payload() {}
-
-type HubToAgent struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Payload:
-	//
-	//	*HubToAgent_ConnectResponse
-	//	*HubToAgent_RouteCommand
-	//	*HubToAgent_RouteSync
-	Payload       isHubToAgent_Payload `protobuf_oneof:"payload"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HubToAgent) Reset() {
-	*x = HubToAgent{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HubToAgent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HubToAgent) ProtoMessage() {}
-
-func (x *HubToAgent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HubToAgent.ProtoReflect.Descriptor instead.
-func (*HubToAgent) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *HubToAgent) GetPayload() isHubToAgent_Payload {
-	if x != nil {
-		return x.Payload
-	}
-	return nil
-}
-
-func (x *HubToAgent) GetConnectResponse() *ConnectResponse {
-	if x != nil {
-		if x, ok := x.Payload.(*HubToAgent_ConnectResponse); ok {
+		if x, ok := x.Payload.(*PeerMessage_ConnectResponse); ok {
 			return x.ConnectResponse
 		}
 	}
 	return nil
 }
 
-func (x *HubToAgent) GetRouteCommand() *RouteCommand {
+func (x *PeerMessage) GetContainerReport() *ContainerReport {
 	if x != nil {
-		if x, ok := x.Payload.(*HubToAgent_RouteCommand); ok {
-			return x.RouteCommand
+		if x, ok := x.Payload.(*PeerMessage_ContainerReport); ok {
+			return x.ContainerReport
 		}
 	}
 	return nil
 }
 
-func (x *HubToAgent) GetRouteSync() *RouteSyncResponse {
-	if x != nil {
-		if x, ok := x.Payload.(*HubToAgent_RouteSync); ok {
-			return x.RouteSync
-		}
-	}
-	return nil
+type isPeerMessage_Payload interface {
+	isPeerMessage_Payload()
 }
 
-type isHubToAgent_Payload interface {
-	isHubToAgent_Payload()
+type PeerMessage_ConnectRequest struct {
+	ConnectRequest *ConnectRequest `protobuf:"bytes,1,opt,name=connect_request,json=connectRequest,proto3,oneof"`
 }
 
-type HubToAgent_ConnectResponse struct {
-	ConnectResponse *ConnectResponse `protobuf:"bytes,1,opt,name=connect_response,json=connectResponse,proto3,oneof"`
+type PeerMessage_ConnectResponse struct {
+	ConnectResponse *ConnectResponse `protobuf:"bytes,2,opt,name=connect_response,json=connectResponse,proto3,oneof"`
 }
 
-type HubToAgent_RouteCommand struct {
-	RouteCommand *RouteCommand `protobuf:"bytes,2,opt,name=route_command,json=routeCommand,proto3,oneof"`
+type PeerMessage_ContainerReport struct {
+	ContainerReport *ContainerReport `protobuf:"bytes,3,opt,name=container_report,json=containerReport,proto3,oneof"`
 }
 
-type HubToAgent_RouteSync struct {
-	RouteSync *RouteSyncResponse `protobuf:"bytes,3,opt,name=route_sync,json=routeSync,proto3,oneof"`
-}
+func (*PeerMessage_ConnectRequest) isPeerMessage_Payload() {}
 
-func (*HubToAgent_ConnectResponse) isHubToAgent_Payload() {}
+func (*PeerMessage_ConnectResponse) isPeerMessage_Payload() {}
 
-func (*HubToAgent_RouteCommand) isHubToAgent_Payload() {}
-
-func (*HubToAgent_RouteSync) isHubToAgent_Payload() {}
+func (*PeerMessage_ContainerReport) isPeerMessage_Payload() {}
 
 type ConnectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -289,7 +129,7 @@ type ConnectRequest struct {
 
 func (x *ConnectRequest) Reset() {
 	*x = ConnectRequest{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[2]
+	mi := &file_internal_api_sidecar_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -301,7 +141,7 @@ func (x *ConnectRequest) String() string {
 func (*ConnectRequest) ProtoMessage() {}
 
 func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[2]
+	mi := &file_internal_api_sidecar_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -314,7 +154,7 @@ func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectRequest.ProtoReflect.Descriptor instead.
 func (*ConnectRequest) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{2}
+	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ConnectRequest) GetNodeName() string {
@@ -333,15 +173,15 @@ func (x *ConnectRequest) GetNodeHostIp() string {
 
 type ConnectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
-	HubId         string                 `protobuf:"bytes,2,opt,name=hub_id,json=hubId,proto3" json:"hub_id,omitempty"`
+	NodeName      string                 `protobuf:"bytes,1,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
+	NodeHostIp    string                 `protobuf:"bytes,2,opt,name=node_host_ip,json=nodeHostIp,proto3" json:"node_host_ip,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConnectResponse) Reset() {
 	*x = ConnectResponse{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[3]
+	mi := &file_internal_api_sidecar_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -353,7 +193,7 @@ func (x *ConnectResponse) String() string {
 func (*ConnectResponse) ProtoMessage() {}
 
 func (x *ConnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[3]
+	mi := &file_internal_api_sidecar_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -366,237 +206,21 @@ func (x *ConnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectResponse.ProtoReflect.Descriptor instead.
 func (*ConnectResponse) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{3}
+	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ConnectResponse) GetAccepted() bool {
+func (x *ConnectResponse) GetNodeName() string {
 	if x != nil {
-		return x.Accepted
-	}
-	return false
-}
-
-func (x *ConnectResponse) GetHubId() string {
-	if x != nil {
-		return x.HubId
+		return x.NodeName
 	}
 	return ""
 }
 
-type RouteCommand struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Action            RouteCommand_Action    `protobuf:"varint,1,opt,name=action,proto3,enum=sidecar.RouteCommand_Action" json:"action,omitempty"`
-	ServiceName       string                 `protobuf:"bytes,2,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
-	ConfigYaml        string                 `protobuf:"bytes,3,opt,name=config_yaml,json=configYaml,proto3" json:"config_yaml,omitempty"`
-	TargetNodeHostIps []string               `protobuf:"bytes,4,rep,name=target_node_host_ips,json=targetNodeHostIps,proto3" json:"target_node_host_ips,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *RouteCommand) Reset() {
-	*x = RouteCommand{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RouteCommand) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RouteCommand) ProtoMessage() {}
-
-func (x *RouteCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[4]
+func (x *ConnectResponse) GetNodeHostIp() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RouteCommand.ProtoReflect.Descriptor instead.
-func (*RouteCommand) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *RouteCommand) GetAction() RouteCommand_Action {
-	if x != nil {
-		return x.Action
-	}
-	return RouteCommand_UPSERT
-}
-
-func (x *RouteCommand) GetServiceName() string {
-	if x != nil {
-		return x.ServiceName
+		return x.NodeHostIp
 	}
 	return ""
-}
-
-func (x *RouteCommand) GetConfigYaml() string {
-	if x != nil {
-		return x.ConfigYaml
-	}
-	return ""
-}
-
-func (x *RouteCommand) GetTargetNodeHostIps() []string {
-	if x != nil {
-		return x.TargetNodeHostIps
-	}
-	return nil
-}
-
-type AckResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServiceName   string                 `protobuf:"bytes,1,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
-	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AckResponse) Reset() {
-	*x = AckResponse{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AckResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AckResponse) ProtoMessage() {}
-
-func (x *AckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AckResponse.ProtoReflect.Descriptor instead.
-func (*AckResponse) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *AckResponse) GetServiceName() string {
-	if x != nil {
-		return x.ServiceName
-	}
-	return ""
-}
-
-func (x *AckResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *AckResponse) GetErrorMessage() string {
-	if x != nil {
-		return x.ErrorMessage
-	}
-	return ""
-}
-
-type RouteSyncRequest struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	ActiveServiceNames []string               `protobuf:"bytes,1,rep,name=active_service_names,json=activeServiceNames,proto3" json:"active_service_names,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
-}
-
-func (x *RouteSyncRequest) Reset() {
-	*x = RouteSyncRequest{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RouteSyncRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RouteSyncRequest) ProtoMessage() {}
-
-func (x *RouteSyncRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RouteSyncRequest.ProtoReflect.Descriptor instead.
-func (*RouteSyncRequest) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *RouteSyncRequest) GetActiveServiceNames() []string {
-	if x != nil {
-		return x.ActiveServiceNames
-	}
-	return nil
-}
-
-type RouteSyncResponse struct {
-	state                     protoimpl.MessageState `protogen:"open.v1"`
-	AuthoritativeServiceNames []string               `protobuf:"bytes,1,rep,name=authoritative_service_names,json=authoritativeServiceNames,proto3" json:"authoritative_service_names,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
-}
-
-func (x *RouteSyncResponse) Reset() {
-	*x = RouteSyncResponse{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RouteSyncResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RouteSyncResponse) ProtoMessage() {}
-
-func (x *RouteSyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RouteSyncResponse.ProtoReflect.Descriptor instead.
-func (*RouteSyncResponse) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *RouteSyncResponse) GetAuthoritativeServiceNames() []string {
-	if x != nil {
-		return x.AuthoritativeServiceNames
-	}
-	return nil
 }
 
 type ContainerInfo struct {
@@ -610,7 +234,7 @@ type ContainerInfo struct {
 
 func (x *ContainerInfo) Reset() {
 	*x = ContainerInfo{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[8]
+	mi := &file_internal_api_sidecar_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -622,7 +246,7 @@ func (x *ContainerInfo) String() string {
 func (*ContainerInfo) ProtoMessage() {}
 
 func (x *ContainerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[8]
+	mi := &file_internal_api_sidecar_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -635,7 +259,7 @@ func (x *ContainerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerInfo.ProtoReflect.Descriptor instead.
 func (*ContainerInfo) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{8}
+	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ContainerInfo) GetContainerId() string {
@@ -668,7 +292,7 @@ type ContainerReport struct {
 
 func (x *ContainerReport) Reset() {
 	*x = ContainerReport{}
-	mi := &file_internal_api_sidecar_proto_msgTypes[9]
+	mi := &file_internal_api_sidecar_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -680,7 +304,7 @@ func (x *ContainerReport) String() string {
 func (*ContainerReport) ProtoMessage() {}
 
 func (x *ContainerReport) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_sidecar_proto_msgTypes[9]
+	mi := &file_internal_api_sidecar_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -693,7 +317,7 @@ func (x *ContainerReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerReport.ProtoReflect.Descriptor instead.
 func (*ContainerReport) Descriptor() ([]byte, []int) {
-	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{9}
+	return file_internal_api_sidecar_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ContainerReport) GetContainers() []*ContainerInfo {
@@ -707,48 +331,20 @@ var File_internal_api_sidecar_proto protoreflect.FileDescriptor
 
 const file_internal_api_sidecar_proto_rawDesc = "" +
 	"\n" +
-	"\x1ainternal/api/sidecar.proto\x12\asidecar\"\x88\x02\n" +
-	"\n" +
-	"AgentToHub\x12B\n" +
-	"\x0fconnect_request\x18\x01 \x01(\v2\x17.sidecar.ConnectRequestH\x00R\x0econnectRequest\x12(\n" +
-	"\x03ack\x18\x02 \x01(\v2\x14.sidecar.AckResponseH\x00R\x03ack\x12:\n" +
-	"\n" +
-	"route_sync\x18\x03 \x01(\v2\x19.sidecar.RouteSyncRequestH\x00R\trouteSync\x12E\n" +
-	"\x10container_report\x18\x04 \x01(\v2\x18.sidecar.ContainerReportH\x00R\x0fcontainerReportB\t\n" +
-	"\apayload\"\xd9\x01\n" +
-	"\n" +
-	"HubToAgent\x12E\n" +
-	"\x10connect_response\x18\x01 \x01(\v2\x18.sidecar.ConnectResponseH\x00R\x0fconnectResponse\x12<\n" +
-	"\rroute_command\x18\x02 \x01(\v2\x15.sidecar.RouteCommandH\x00R\frouteCommand\x12;\n" +
-	"\n" +
-	"route_sync\x18\x03 \x01(\v2\x1a.sidecar.RouteSyncResponseH\x00R\trouteSyncB\t\n" +
+	"\x1ainternal/api/sidecar.proto\x12\asidecar\"\xea\x01\n" +
+	"\vPeerMessage\x12B\n" +
+	"\x0fconnect_request\x18\x01 \x01(\v2\x17.sidecar.ConnectRequestH\x00R\x0econnectRequest\x12E\n" +
+	"\x10connect_response\x18\x02 \x01(\v2\x18.sidecar.ConnectResponseH\x00R\x0fconnectResponse\x12E\n" +
+	"\x10container_report\x18\x03 \x01(\v2\x18.sidecar.ContainerReportH\x00R\x0fcontainerReportB\t\n" +
 	"\apayload\"O\n" +
 	"\x0eConnectRequest\x12\x1b\n" +
 	"\tnode_name\x18\x01 \x01(\tR\bnodeName\x12 \n" +
 	"\fnode_host_ip\x18\x02 \x01(\tR\n" +
-	"nodeHostIp\"D\n" +
-	"\x0fConnectResponse\x12\x1a\n" +
-	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x15\n" +
-	"\x06hub_id\x18\x02 \x01(\tR\x05hubId\"\xdb\x01\n" +
-	"\fRouteCommand\x124\n" +
-	"\x06action\x18\x01 \x01(\x0e2\x1c.sidecar.RouteCommand.ActionR\x06action\x12!\n" +
-	"\fservice_name\x18\x02 \x01(\tR\vserviceName\x12\x1f\n" +
-	"\vconfig_yaml\x18\x03 \x01(\tR\n" +
-	"configYaml\x12/\n" +
-	"\x14target_node_host_ips\x18\x04 \x03(\tR\x11targetNodeHostIps\" \n" +
-	"\x06Action\x12\n" +
-	"\n" +
-	"\x06UPSERT\x10\x00\x12\n" +
-	"\n" +
-	"\x06DELETE\x10\x01\"o\n" +
-	"\vAckResponse\x12!\n" +
-	"\fservice_name\x18\x01 \x01(\tR\vserviceName\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"D\n" +
-	"\x10RouteSyncRequest\x120\n" +
-	"\x14active_service_names\x18\x01 \x03(\tR\x12activeServiceNames\"S\n" +
-	"\x11RouteSyncResponse\x12>\n" +
-	"\x1bauthoritative_service_names\x18\x01 \x03(\tR\x19authoritativeServiceNames\"\xbd\x01\n" +
+	"nodeHostIp\"P\n" +
+	"\x0fConnectResponse\x12\x1b\n" +
+	"\tnode_name\x18\x01 \x01(\tR\bnodeName\x12 \n" +
+	"\fnode_host_ip\x18\x02 \x01(\tR\n" +
+	"nodeHostIp\"\xbd\x01\n" +
 	"\rContainerInfo\x12!\n" +
 	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12:\n" +
@@ -759,9 +355,9 @@ const file_internal_api_sidecar_proto_rawDesc = "" +
 	"\x0fContainerReport\x126\n" +
 	"\n" +
 	"containers\x18\x01 \x03(\v2\x16.sidecar.ContainerInfoR\n" +
-	"containers2I\n" +
-	"\x0eSidecarService\x127\n" +
-	"\aConnect\x12\x13.sidecar.AgentToHub\x1a\x13.sidecar.HubToAgent(\x010\x01B4Z2github.com/chamoouske/traefik-sidecar/internal/apib\x06proto3"
+	"containers2K\n" +
+	"\x0eSidecarService\x129\n" +
+	"\aConnect\x12\x14.sidecar.PeerMessage\x1a\x14.sidecar.PeerMessage(\x010\x01B4Z2github.com/chamoouske/traefik-sidecar/internal/apib\x06proto3"
 
 var (
 	file_internal_api_sidecar_proto_rawDescOnce sync.Once
@@ -775,40 +371,28 @@ func file_internal_api_sidecar_proto_rawDescGZIP() []byte {
 	return file_internal_api_sidecar_proto_rawDescData
 }
 
-var file_internal_api_sidecar_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_internal_api_sidecar_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_internal_api_sidecar_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_internal_api_sidecar_proto_goTypes = []any{
-	(RouteCommand_Action)(0),  // 0: sidecar.RouteCommand.Action
-	(*AgentToHub)(nil),        // 1: sidecar.AgentToHub
-	(*HubToAgent)(nil),        // 2: sidecar.HubToAgent
-	(*ConnectRequest)(nil),    // 3: sidecar.ConnectRequest
-	(*ConnectResponse)(nil),   // 4: sidecar.ConnectResponse
-	(*RouteCommand)(nil),      // 5: sidecar.RouteCommand
-	(*AckResponse)(nil),       // 6: sidecar.AckResponse
-	(*RouteSyncRequest)(nil),  // 7: sidecar.RouteSyncRequest
-	(*RouteSyncResponse)(nil), // 8: sidecar.RouteSyncResponse
-	(*ContainerInfo)(nil),     // 9: sidecar.ContainerInfo
-	(*ContainerReport)(nil),   // 10: sidecar.ContainerReport
-	nil,                       // 11: sidecar.ContainerInfo.LabelsEntry
+	(*PeerMessage)(nil),     // 0: sidecar.PeerMessage
+	(*ConnectRequest)(nil),  // 1: sidecar.ConnectRequest
+	(*ConnectResponse)(nil), // 2: sidecar.ConnectResponse
+	(*ContainerInfo)(nil),   // 3: sidecar.ContainerInfo
+	(*ContainerReport)(nil), // 4: sidecar.ContainerReport
+	nil,                     // 5: sidecar.ContainerInfo.LabelsEntry
 }
 var file_internal_api_sidecar_proto_depIdxs = []int32{
-	3,  // 0: sidecar.AgentToHub.connect_request:type_name -> sidecar.ConnectRequest
-	6,  // 1: sidecar.AgentToHub.ack:type_name -> sidecar.AckResponse
-	7,  // 2: sidecar.AgentToHub.route_sync:type_name -> sidecar.RouteSyncRequest
-	10, // 3: sidecar.AgentToHub.container_report:type_name -> sidecar.ContainerReport
-	4,  // 4: sidecar.HubToAgent.connect_response:type_name -> sidecar.ConnectResponse
-	5,  // 5: sidecar.HubToAgent.route_command:type_name -> sidecar.RouteCommand
-	8,  // 6: sidecar.HubToAgent.route_sync:type_name -> sidecar.RouteSyncResponse
-	0,  // 7: sidecar.RouteCommand.action:type_name -> sidecar.RouteCommand.Action
-	11, // 8: sidecar.ContainerInfo.labels:type_name -> sidecar.ContainerInfo.LabelsEntry
-	9,  // 9: sidecar.ContainerReport.containers:type_name -> sidecar.ContainerInfo
-	1,  // 10: sidecar.SidecarService.Connect:input_type -> sidecar.AgentToHub
-	2,  // 11: sidecar.SidecarService.Connect:output_type -> sidecar.HubToAgent
-	11, // [11:12] is the sub-list for method output_type
-	10, // [10:11] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	1, // 0: sidecar.PeerMessage.connect_request:type_name -> sidecar.ConnectRequest
+	2, // 1: sidecar.PeerMessage.connect_response:type_name -> sidecar.ConnectResponse
+	4, // 2: sidecar.PeerMessage.container_report:type_name -> sidecar.ContainerReport
+	5, // 3: sidecar.ContainerInfo.labels:type_name -> sidecar.ContainerInfo.LabelsEntry
+	3, // 4: sidecar.ContainerReport.containers:type_name -> sidecar.ContainerInfo
+	0, // 5: sidecar.SidecarService.Connect:input_type -> sidecar.PeerMessage
+	0, // 6: sidecar.SidecarService.Connect:output_type -> sidecar.PeerMessage
+	6, // [6:7] is the sub-list for method output_type
+	5, // [5:6] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_internal_api_sidecar_proto_init() }
@@ -817,29 +401,22 @@ func file_internal_api_sidecar_proto_init() {
 		return
 	}
 	file_internal_api_sidecar_proto_msgTypes[0].OneofWrappers = []any{
-		(*AgentToHub_ConnectRequest)(nil),
-		(*AgentToHub_Ack)(nil),
-		(*AgentToHub_RouteSync)(nil),
-		(*AgentToHub_ContainerReport)(nil),
-	}
-	file_internal_api_sidecar_proto_msgTypes[1].OneofWrappers = []any{
-		(*HubToAgent_ConnectResponse)(nil),
-		(*HubToAgent_RouteCommand)(nil),
-		(*HubToAgent_RouteSync)(nil),
+		(*PeerMessage_ConnectRequest)(nil),
+		(*PeerMessage_ConnectResponse)(nil),
+		(*PeerMessage_ContainerReport)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_api_sidecar_proto_rawDesc), len(file_internal_api_sidecar_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   11,
+			NumEnums:      0,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_internal_api_sidecar_proto_goTypes,
 		DependencyIndexes: file_internal_api_sidecar_proto_depIdxs,
-		EnumInfos:         file_internal_api_sidecar_proto_enumTypes,
 		MessageInfos:      file_internal_api_sidecar_proto_msgTypes,
 	}.Build()
 	File_internal_api_sidecar_proto = out.File

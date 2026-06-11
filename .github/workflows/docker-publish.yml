@@ -1,11 +1,4 @@
-# Workflow: Build and Push Docker Images
-#
-# Este workflow é responsável por:
-# - Construir as imagens Docker hub e agent
-# - Publicar as imagens no DockerHub em pushes para main/master
-# - Validar o build em Pull Requests (sem push)
-
-name: Build and Push Docker Images
+name: Build and Push Agent Image
 
 on:
   push:
@@ -20,50 +13,33 @@ env:
 
 jobs:
   build-and-push:
-    name: Build ${{ matrix.image }}
+    name: Build agent
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-      matrix:
-        # Define as duas imagens que serão construídas em paralelo
-        include:
-          - image: hub
-            dockerfile: Dockerfile.hub
-          - image: agent
-            dockerfile: Dockerfile.agent
-
     steps:
-      # 1. Checkout do repositório
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Login no DockerHub (apenas em pushes, não em PRs)
       - name: Log in to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 3. Gerar metadados (tags e labels) para a imagem
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.DOCKERHUB_USERNAME }}/traefik-sidecar-${{ matrix.image }}
+          images: ${{ env.DOCKERHUB_USERNAME }}/traefik-sidecar-agent
           tags: |
-            # Tag com SHA curto do commit (ex: abc1234)
             type=sha,prefix=,format=short
-            # Tag latest apenas para pushes na branch padrão
             type=raw,value=latest,enable={{is_default_branch}}
 
-      # 4. Construir e (opcionalmente) publicar a imagem
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
-          # Push apenas em pushes para main/master; em PRs apenas build
+          file: Dockerfile.agent
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

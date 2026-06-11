@@ -29,15 +29,12 @@ func setEnv(t *testing.T, vars map[string]string) func() {
 	}
 }
 
-func TestLoadHubDefaults(t *testing.T) {
+func TestLoadDefaults(t *testing.T) {
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if cfg.HubAddr != ":8080" {
-		t.Errorf("expected HubAddr :8080, got %s", cfg.HubAddr)
-	}
 	if cfg.DockerHost != "unix:///var/run/docker.sock" {
 		t.Errorf("expected DockerHost unix:///var/run/docker.sock, got %s", cfg.DockerHost)
 	}
@@ -53,21 +50,19 @@ func TestLoadHubDefaults(t *testing.T) {
 	if cfg.TraefikPort != 80 {
 		t.Errorf("expected TraefikPort 80, got %d", cfg.TraefikPort)
 	}
-	if cfg.BridgeName != "traefik_bridge" {
-		t.Errorf("expected BridgeName traefik_bridge, got %s", cfg.BridgeName)
+	if cfg.AgentPort != 9090 {
+		t.Errorf("expected AgentPort 9090, got %d", cfg.AgentPort)
 	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
 	restore := setEnv(t, map[string]string{
-		"TRAEFIK_SIDECAR_HUB_ADDR":       ":9090",
 		"TRAEFIK_SIDECAR_DOCKER_HOST":    "tcp://192.168.1.100:2375",
 		"TRAEFIK_SIDECAR_LOG_LEVEL":      "debug",
 		"TRAEFIK_SIDECAR_CONFIG_DIR":     "/custom/path",
 		"TRAEFIK_SIDECAR_TRAEFIK_PORT":   "443",
 		"TRAEFIK_SIDECAR_AGENT_PORT":     "9999",
 		"TRAEFIK_SIDECAR_POLL_INTERVAL":  "30s",
-		"TRAEFIK_SIDECAR_BRIDGE_NAME":    "custom_bridge",
 		"TRAEFIK_SIDECAR_PUID":           "2000",
 		"TRAEFIK_SIDECAR_GUID":           "2000",
 	})
@@ -78,9 +73,6 @@ func TestLoadFromEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.HubAddr != ":9090" {
-		t.Errorf("expected HubAddr :9090, got %s", cfg.HubAddr)
-	}
 	if cfg.DockerHost != "tcp://192.168.1.100:2375" {
 		t.Errorf("expected DockerHost tcp://..., got %s", cfg.DockerHost)
 	}
@@ -98,9 +90,6 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 	if cfg.PollInterval != 30*time.Second {
 		t.Errorf("expected PollInterval 30s, got %v", cfg.PollInterval)
-	}
-	if cfg.BridgeName != "custom_bridge" {
-		t.Errorf("expected BridgeName custom_bridge, got %s", cfg.BridgeName)
 	}
 	if cfg.PUID != "2000" {
 		t.Errorf("expected PUID 2000, got %s", cfg.PUID)

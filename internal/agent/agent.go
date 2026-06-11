@@ -5,23 +5,52 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/chamoouske/traefik-sidecar/pkg/docker"
 )
 
 type Config struct {
-	ConfigDir string
+	ConfigDir   string
+	TraefikPort int
+	NodeHostIP  string
 }
 
 type Agent struct {
-	mu           sync.RWMutex
-	configDir    string
-	activeRoutes map[string]bool
+	mu               sync.RWMutex
+	configDir        string
+	traefikPort      int
+	nodeHostIP       string
+	activeRoutes     map[string]bool
+	localContainers  []docker.Container
+	remoteContainers map[string][]docker.Container
 }
 
 func New(cfg *Config) *Agent {
 	return &Agent{
-		configDir:    cfg.ConfigDir,
-		activeRoutes: make(map[string]bool),
+		configDir:        cfg.ConfigDir,
+		traefikPort:      cfg.TraefikPort,
+		nodeHostIP:       cfg.NodeHostIP,
+		activeRoutes:     make(map[string]bool),
+		remoteContainers: make(map[string][]docker.Container),
 	}
+}
+
+func (a *Agent) SetLocalContainers(containers []docker.Container) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.localContainers = containers
+}
+
+func (a *Agent) UpdateRemoteContainers(peerIP string, containers []docker.Container) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.remoteContainers[peerIP] = containers
+}
+
+func (a *Agent) RemovePeer(peerIP string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.remoteContainers, peerIP)
 }
 
 func (a *Agent) WriteRouteConfig(serviceName, configYAML string) error {
@@ -67,4 +96,24 @@ func (a *Agent) GetActiveServices() []string {
 		result = append(result, s)
 	}
 	return result
+}
+
+func (a *Agent) ApplyConfig(routes []Route) {
+	written := make(map[string]bool)
+
+	for _, r := range routes {
+		if r.Action != RouteUpsert {
+			continue
+		}
+		if err := a.WriteRouteConfig(r.ServiceName, r.ConfigYAML); err != nil {
+			continue
+		}
+		written[r.ServiceName] = true
+	}
+
+	for _, s := range a.GetActiveServices() {
+		if !written[s] {
+			a.RemoveRouteConfig(s)
+		}
+	}
 }

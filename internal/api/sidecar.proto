@@ -5,23 +5,14 @@ package sidecar;
 option go_package = "github.com/chamoouske/traefik-sidecar/internal/api";
 
 service SidecarService {
-  rpc Connect(stream AgentToHub) returns (stream HubToAgent);
+  rpc Connect(stream PeerMessage) returns (stream PeerMessage);
 }
 
-message AgentToHub {
+message PeerMessage {
   oneof payload {
     ConnectRequest connect_request = 1;
-    AckResponse ack = 2;
-    RouteSyncRequest route_sync = 3;
-    ContainerReport container_report = 4;
-  }
-}
-
-message HubToAgent {
-  oneof payload {
-    ConnectResponse connect_response = 1;
-    RouteCommand route_command = 2;
-    RouteSyncResponse route_sync = 3;
+    ConnectResponse connect_response = 2;
+    ContainerReport container_report = 3;
   }
 }
 
@@ -31,33 +22,8 @@ message ConnectRequest {
 }
 
 message ConnectResponse {
-  bool accepted = 1;
-  string hub_id = 2;
-}
-
-message RouteCommand {
-  enum Action {
-    UPSERT = 0;
-    DELETE = 1;
-  }
-  Action action = 1;
-  string service_name = 2;
-  string config_yaml = 3;
-  repeated string target_node_host_ips = 4;
-}
-
-message AckResponse {
-  string service_name = 1;
-  bool success = 2;
-  string error_message = 3;
-}
-
-message RouteSyncRequest {
-  repeated string active_service_names = 1;
-}
-
-message RouteSyncResponse {
-  repeated string authoritative_service_names = 1;
+  string node_name = 1;
+  string node_host_ip = 2;
 }
 
 message ContainerInfo {

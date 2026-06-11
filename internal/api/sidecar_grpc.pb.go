@@ -26,7 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SidecarServiceClient interface {
-	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentToHub, HubToAgent], error)
+	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[PeerMessage, PeerMessage], error)
 }
 
 type sidecarServiceClient struct {
@@ -37,24 +37,24 @@ func NewSidecarServiceClient(cc grpc.ClientConnInterface) SidecarServiceClient {
 	return &sidecarServiceClient{cc}
 }
 
-func (c *sidecarServiceClient) Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentToHub, HubToAgent], error) {
+func (c *sidecarServiceClient) Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[PeerMessage, PeerMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &SidecarService_ServiceDesc.Streams[0], SidecarService_Connect_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[AgentToHub, HubToAgent]{ClientStream: stream}
+	x := &grpc.GenericClientStream[PeerMessage, PeerMessage]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SidecarService_ConnectClient = grpc.BidiStreamingClient[AgentToHub, HubToAgent]
+type SidecarService_ConnectClient = grpc.BidiStreamingClient[PeerMessage, PeerMessage]
 
 // SidecarServiceServer is the server API for SidecarService service.
 // All implementations must embed UnimplementedSidecarServiceServer
 // for forward compatibility.
 type SidecarServiceServer interface {
-	Connect(grpc.BidiStreamingServer[AgentToHub, HubToAgent]) error
+	Connect(grpc.BidiStreamingServer[PeerMessage, PeerMessage]) error
 	mustEmbedUnimplementedSidecarServiceServer()
 }
 
@@ -65,7 +65,7 @@ type SidecarServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSidecarServiceServer struct{}
 
-func (UnimplementedSidecarServiceServer) Connect(grpc.BidiStreamingServer[AgentToHub, HubToAgent]) error {
+func (UnimplementedSidecarServiceServer) Connect(grpc.BidiStreamingServer[PeerMessage, PeerMessage]) error {
 	return status.Error(codes.Unimplemented, "method Connect not implemented")
 }
 func (UnimplementedSidecarServiceServer) mustEmbedUnimplementedSidecarServiceServer() {}
@@ -90,11 +90,11 @@ func RegisterSidecarServiceServer(s grpc.ServiceRegistrar, srv SidecarServiceSer
 }
 
 func _SidecarService_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(SidecarServiceServer).Connect(&grpc.GenericServerStream[AgentToHub, HubToAgent]{ServerStream: stream})
+	return srv.(SidecarServiceServer).Connect(&grpc.GenericServerStream[PeerMessage, PeerMessage]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SidecarService_ConnectServer = grpc.BidiStreamingServer[AgentToHub, HubToAgent]
+type SidecarService_ConnectServer = grpc.BidiStreamingServer[PeerMessage, PeerMessage]
 
 // SidecarService_ServiceDesc is the grpc.ServiceDesc for SidecarService service.
 // It's only intended for direct use with grpc.RegisterService,
