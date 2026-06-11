@@ -5,31 +5,29 @@
 ```
 /
 ├── cmd/
-│   ├── hub/main.go          # Hub entrypoint
 │   └── agent/main.go        # Agent entrypoint
 ├── internal/
 │   ├── api/                 # Shared protobuf definitions and gRPC interface
-│   ├── hub/                 # Hub business logic
 │   ├── agent/               # Agent business logic
 │   └── config/              # Shared configuration types
 ├── pkg/
-│   └── docker/              # Docker/Swarm API client (Hub only)
+│   └── docker/              # Docker API client (used by every Agent)
 ├── docs/
 │   ├── ARCHITECTURE.md      # System architecture
 │   └── adr/                 # Architecture Decision Records
 ├── docker-compose.yml
-├── Dockerfile.hub
 ├── Dockerfile.agent
 └── CONTEXT.md               # Domain glossary
 ```
 
 ## Architecture Rules
 
-1. **Hub is the single source of truth** — only the Hub reads the Docker/Swarm API. Agents never mount the Docker socket.
-2. **No standard Traefik labels** — services use only `traefik.sidecar.*` labels. The sidecar generates all routing config via the file provider. Standard `traefik.http.*` labels must not appear on services to avoid conflicts with the Swarm provider.
-3. **Agent-initiated gRPC stream** — Agent dials out to Hub. The connection is persistent and bidirectional.
-4. **Weighted routing** — local routes (weight 9) vs cross-node routes (weight 1) to prevent loops.
-5. **Safety net polling** — Agent polls Hub every 60s as eventual consistency fallback.
+1. **No standard Traefik labels** — containers use only `traefik.sidecar.*` labels. The sidecar generates all routing config via the file provider. Standard `traefik.http.*` labels must not appear on containers to avoid conflicts.
+2. **Peer-to-peer gRPC mesh** — each Agent connects to all discovered peers via gRPC bidirectional streams. Connection is initiated by the discovering Agent.
+3. **mDNS discovery** — Agents announce and discover each other automatically via multicast DNS.
+4. **Each Agent mounts Docker socket** — every Agent reads its own node's containers and labels directly.
+5. **Weighted routing** — local routes (weight 9) vs cross-node routes (weight 1) to prevent loops.
+6. **Safety net polling** — periodic full-state exchange between peers (default: 60s) as eventual consistency fallback.
 
 ## Mandatory Practices
 
@@ -39,14 +37,14 @@
 ## Code Conventions
 
 - **Language:** Go
-- **gRPC:** Protocol Buffers for all Hub-Agent communication contracts
-- **Docker client:** Only in `pkg/docker/`, used exclusively by Hub
+- **gRPC:** Protocol Buffers for all Agent-to-Agent communication contracts
+- **Docker client:** In `pkg/docker/`, used by every Agent
 - **Configuration:** Environment variables, prefixed with `TRAEFIK_SIDECAR_`
 
 ## Testing
 
 - **Unit tests:** standard Go `_test.go` files next to implementation
-- **Integration tests:** require a Docker Swarm test environment
+- **Integration tests:** require a multi-host Docker environment with mDNS
 - **gRPC contracts:** test via gRPC stub/server in `internal/api/`
 
 ## Build
@@ -56,6 +54,5 @@
 protoc --go_out=. --go-grpc_out=. internal/api/*.proto
 
 # Build
-go build ./cmd/hub
 go build ./cmd/agent
 ```

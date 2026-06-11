@@ -1,8 +1,10 @@
 # ADR-0002: Centralized Docker API Access via Hub
 
-**Status:** Accepted
+**Status:** Superseded by ADR-0004
 
 **Date:** 2026-06-11
+
+**Superseded by:** ADR-0004 (Peer-to-Peer Mesh with mDNS Discovery)
 
 ## Context
 

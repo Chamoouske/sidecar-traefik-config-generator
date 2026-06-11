@@ -2,156 +2,166 @@
 
 ## Overview
 
-Traefik Sidecar is a cross-node routing system for Docker Swarm. It is the **sole source of Traefik routing configuration** — it generates all configuration files so that HTTP requests arriving at any node can reach services running on any other node.
+Traefik Sidecar is a cross-node routing system for multi-host Docker (no Swarm). It is the **sole source of Traefik routing configuration** — it generates all configuration files so that HTTP requests arriving at any node can reach containers running on any other node.
 
-Services do NOT use standard Traefik Swarm provider labels (`traefik.http.*`). Instead, they use custom `traefik.sidecar.*` labels. The sidecar reads these labels via the Docker API and builds the complete Traefik configuration through the file provider.
+Containers do NOT use standard Traefik labels (`traefik.http.*`). Instead, they use custom `traefik.sidecar.*` labels. Each Agent reads these labels via the local Docker API and builds the complete Traefik configuration through the file provider.
 
-The system is composed of two Go components:
+The system is composed of a single component deployed per node:
 
-- **Hub** — central coordinator (manager node, 1 replica)
-- **Agent** — per-node sidecar (global mode)
+- **Agent** — per-node sidecar container
 
-Both run as containers in the same Docker Swarm overlay network as Traefik.
+Agents discover each other via **mDNS** and form a **full mesh** of gRPC bidirectional streams. Each Agent mounts the local Docker socket, discovers its own containers, and reports them to all peers. Each Agent independently computes its own Traefik configuration.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Swarm Cluster                      │
-│                                                      │
-│  ┌────── Manager (Linux) ──────┐                     │
-│  │  ┌─────────┐  ┌──────────┐  │                     │
-│  │  │ Traefik │  │   Hub    │  │                     │
-│  │  │ (global)│  │ (1 repl) │  │                     │
-│  │  └─────────┘  └────┬─────┘  │                     │
-│  └─────────────────────┼────────┘                     │
-│                        │ gRPC stream                  │
-│        ┌───────────────┼───────────────┐              │
-│        │               │               │              │
-│  ┌─────┴───┐    ┌──────┴────┐    ┌────┴─────┐        │
-│  │ Agent 1 │    │ Agent 2   │    │ Agent 3  │ ...    │
-│  │ (Linux) │    │ (Windows) │    │ (Linux)  │        │
-│  └──┬──────┘    └──┬───────┘    └──┬───────┘        │
-│     │ write        │ write         │ write            │
-│  ┌──┴──────┐  ┌────┴──────┐  ┌────┴──────┐          │
-│  │ Traefik │  │  Traefik  │  │  Traefik  │           │
-│  │ config  │  │  config   │  │  config   │           │
-│  │ files   │  │  files    │  │  files    │           │
-│  └─────────┘  └───────────┘  └───────────┘           │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                   Network (LAN)                        │
+│                                                        │
+│  ┌──────────┐       mDNS       ┌──────────┐          │
+│  │  Host 1   │◄──────────────►│  Host 2   │          │
+│  │           │                │           │          │
+│  │ ┌──────┐ │   gRPC stream   │ ┌──────┐ │          │
+│  │ │Agent │─┼─────────────────┼─│Agent │ │          │
+│  │ └──┬───┘ │                │ └──┬───┘ │          │
+│  │    │     │                │    │     │          │
+│  │ ┌──┴───┐ │                │ ┌──┴───┐ │          │
+│  │ │Traefik│ │                │ │Traefik│ │          │
+│  │ └──────┘ │                │ └──────┘ │          │
+│  └──────────┘                └──────────┘          │
+│        │                            │                │
+│  ┌─────┴─────┐              ┌──────┴─────┐          │
+│  │ Container  │              │  Container  │          │
+│  │   A, B     │              │    C        │          │
+│  └───────────┘              └────────────┘          │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## Components
 
-### Hub
+### Agent (one per host)
 
-The Hub is the brain of the system. It:
+The Agent is autonomous. It:
 
-- Connects to the Docker/Swarm API via the mounted socket
-- Subscribes to Docker events (service create, update, remove; task scheduling)
-- Reads `traefik.sidecar.*` labels from every service in the Swarm
-- Maintains a global registry: mapping of services → tasks → nodes → host IPs
-- Computes the **full routing configuration** for each service (routers, middlewares, services, servers, loadbalancer settings)
-- Computes cross-node routes between nodes
-- Pushes route creation/removal commands to the relevant Agents
+- Mounts the **Docker socket** to discover local containers and subscribe to Docker events
+- Reads `traefik.sidecar.*` labels from every local container
+- Announces itself via **mDNS** (`_traefik-sidecar._tcp`) and discovers peers
+- Establishes **gRPC bidirectional streams** with every discovered peer
+- Exchanges `ContainerReport` messages: sends its local container list, receives peer container lists
+- Maintains a local registry: mapping of host IP → containers on that host
+- Computes its own Traefik configuration from the combined local + peer data
+- Writes Traefik configuration files to a shared volume (`/dynamic`)
+- Runs a **safety net** periodic full-state sync (default: 60s) with all peers
+- Exposes a **gRPC health service** (port 9090) for healthchecks
 
-The Hub is stateless in terms of storage — all state is rebuilt from the Docker API on restart. It does NOT store data in a database.
-
-### Agent
-
-The Agent is the executor. It:
-
-- Initiates a gRPC bidirectional stream connection to the Hub (Agent → Hub dial)
-- Listens for incoming commands (Hub → Agent) on the stream
-- Writes Traefik configuration files to a shared volume (/dynamic)
-- Sends status acknowledgments back (Agent → Hub)
-- Polls the Hub periodically (safety net) to verify route validity
-
-The Agent does NOT mount the Docker socket — all service/task information comes through the Hub.
+The Agent is the **sole authority** on its own containers — no other component reads its Docker socket.
 
 ## Communication
 
-### gRPC Bidirectional Stream
+### mDNS Discovery
 
-The Agent initiates a single long-lived gRPC stream to the Hub:
+When an Agent starts, it:
+
+1. Registers a service `_traefik-sidecar._tcp` on its host IP with port 9090
+2. Browses for other `_traefik-sidecar._tcp` services on the network
+3. For each discovered peer host, attempts a gRPC connection
+
+Re-discovery runs periodically to detect new peers joining the network.
+
+### gRPC Bidirectional Stream (Peer-to-Peer)
+
+Once two Agents discover each other, they establish a single long-lived gRPC bidirectional stream:
 
 ```
-Agent ───── gRPC stream ──────► Hub
+Agent A                          Agent B
   │                                │
-  │ ◄──── commands ─────────────── │
-  │ ────── status/ack ──────────► │
+  │── ContainerReport(c1, c2) ──► │
+  │◄── ContainerReport(c3) ────── │
+  │                                │
+  │── (on change) Report(c2') ──► │
+  │◄── (on change) Report(c4) ─── │
 ```
 
-**Why gRPC over HTTP:** The previous system used HTTP (Agent as server, Hub as client) and suffered from "connection refused" on Agent → Hub requests. With gRPC streams, the Agent dials out to the Hub — the connection is established once and kept alive. This eliminates the connectivity issue regardless of network topology.
+**Each Agent sends only its own local containers.** No route commands are exchanged — each peer independently computes its configuration.
 
-**Wire format:** Protocol Buffers (protobuf) contracts shared between Hub and Agent.
+### Cross-node Routing
 
-### Cross-node Routing (service discovery)
+When a request arrives at a Traefik that has no local container for the target service, that Traefik forwards the request to the Traefik on the node where the container is running.
 
-When a request arrives at a Traefik that has no local task for the target service, that Traefik forwards the request to the Traefik on the node where the task is running.
-
-The routing uses the **host IP** of the destination node (not the overlay network), because native overlay communication between Windows and Linux nodes is unreliable.
+The routing uses the **host IP** of the destination node, not the overlay network.
 
 ```
-Client ──► Traefik (Node 2) ──► http://<host-ip-node-1>/ ──► Traefik (Node 1) ──► Service A (local task)
-                                  │                              │
-                              Host header: app.local         Sidecar-generated
-                                                              local route resolves
+Client ──► Traefik (Node 2) ──► http://<host-ip-node-1>/ ──► Traefik (Node 1) ──► Service A (local container)
+                                    │                            │
+                                Host header: app.local       Sidecar-generated
+                                                             local route resolves
 ```
 
 ### Loop Prevention — Weighted Routing
 
-Since the sidecar generates all routes (both local and cross-node), it can assign different weights to each. To prevent forwarding loops, each node applies **weighted routing**:
+Each node applies **weighted routing** to prevent forwarding loops:
 
 | Route type | Weight |
 |-----------|--------|
 | Local      | 9      |
 | Cross-node | 1      |
 
-With this weighting, the probability of a request looping back and forth more than a few hops approaches zero exponentially. Formally, the chance of a request being forwarded at each hop is 10%, so after N hops the probability is 0.1^N.
+The probability of a request being forwarded at each hop is 10%, so after N hops the probability is 0.1^N.
 
-### Safety Net (Polling)
+### Safety Net (Periodic Full Sync)
 
-As a recovery mechanism, each Agent polls the Hub at a configurable interval (default: 60s). The Agent sends its current list of cross-node routes, and the Hub responds with the authoritative list for that node. The Agent removes any route no longer present in the Hub's response.
+As a recovery mechanism, each Agent performs a full state exchange with all peers at a configurable interval (default: 60s). The Agent compares the received container reports with its local registry and removes stale entries.
 
 This ensures eventual consistency even if a gRPC notification was missed.
 
-## Data Flow: Service Creation
+## Data Flow: Container Creation
 
 ```
-1. Docker: service created with traefik.sidecar.* labels
-2. Hub: receives Docker event via Swarm API
-3. Hub: queries Swarm API for service details, labels, task placement, node host IPs
-4. Hub: builds full Traefik config for the service (routers, services, middlewares)
-5. Hub: computes required cross-node routes
-       For each node that does NOT have a local task:
-         → schedule a cross-node route pointing to the node that HAS the task
-6. Hub: sends gRPC command to each node's Agent
-       ─→ Command: UPSERT_ROUTE {service, full_config, target_node_host_ip}
-   -- Node with local task → writes local route (weight 9) + cross-node routes (weight 1)
-   -- Node without local task → writes only cross-node routes (weight 1)
-7. Agent: receives command, writes <service>.yml to /dynamic
-8. Agent: sends ACK back to Hub
-9. Traefik: file provider detects change, reloads config
+1. Docker: container started with traefik.sidecar.* labels
+2. Agent A: receives Docker event via local Docker socket
+3. Agent A: inspects container, extracts labels, ports, networks
+4. Agent A: sends ContainerReport(updated) to all peers
+5. Agent A: recomputes own config
+       - New container is local to A → route weight 9
+       - Other nodes route to A's IP → route weight 1
+6. Agent A: writes <service>.yml to /dynamic
+7. Agent B: receives ContainerReport from A
+8. Agent B: recomputes own config
+       - Container lives on A → remote route to A's IP → weight 1
+9. Agent B: writes <service>.yml to /dynamic
+10. Each Traefik: file provider detects change, reloads config
 ```
 
-## Data Flow: Service Removal
+## Data Flow: Container Removal
 
 ```
-1. Docker: service removed / scaled down
-2. Hub: receives Docker event
-3. Hub: computes which cross-node routes are no longer needed
-4. Hub: sends gRPC command to each relevant Agent
-       ─→ Command: DELETE_ROUTE {service}
-5. Agent: removes <service>.yml from /dynamic
-6. Agent: sends ACK back to Hub
+1. Docker: container stopped / removed
+2. Agent A: receives Docker event
+3. Agent A: sends ContainerReport(container removed) to all peers
+4. Agent A: recomputes config, removes stale routes
+5. Agent A: removes <service>.yml from /dynamic
+6. Agent B: receives updated ContainerReport from A
+7. Agent B: recomputes config, removes routes pointing to A's node
+8. Agent B: removes <service>.yml from /dynamic
+```
+
+## Data Flow: New Peer Discovery
+
+```
+1. Agent B starts, announces via mDNS
+2. Agent A: discovers Agent B via mDNS browse
+3. Agent A: establishes gRPC stream to B:9090
+4. Agent A: sends full ContainerReport(local containers) to B
+5. Agent B: sends full ContainerReport(local containers) to A
+6. Both Agents: recompute configs with new peer data
+7. Both Agents: write updated YAML files
 ```
 
 ## Labels Convention
 
-Services use only `traefik.sidecar.*` labels. Standard Traefik Swarm labels (`traefik.http.*`) must NOT be used — the sidecar generates the complete routing configuration via the file provider.
+Containers use only `traefik.sidecar.*` labels. Standard Traefik labels (`traefik.http.*`) must NOT be used — the sidecar generates the complete routing configuration via the file provider.
 
 | Label | Required | Description |
 |-------|----------|-------------|
-| `traefik.sidecar.enable` | Yes | `true` to enable routing for this service |
+| `traefik.sidecar.enable` | Yes | `true` to enable routing for this container |
 | `traefik.sidecar.cross-node` | No | `true` to enable cross-node routing |
 | `traefik.sidecar.router.rule` | Yes | Traefik router rule (e.g. `Host(\`app.local\`)`) |
 | `traefik.sidecar.router.entrypoints` | No | Entrypoints (default: `websecure`) |
@@ -161,29 +171,25 @@ Services use only `traefik.sidecar.*` labels. Standard Traefik Swarm labels (`tr
 | `traefik.sidecar.service.scheme` | No | Protocol scheme (default: `http`) |
 | `traefik.sidecar.middleware.<name>.<type>` | No | Inline middleware definition |
 
-The Hub reads these labels from the Docker API and translates them into the corresponding Traefik dynamic configuration YAML.
+Each Agent reads these labels from the local Docker API and translates them into the corresponding Traefik dynamic configuration YAML.
 
 ## Directory Structure
 
 ```
 /
 ├── cmd/
-│   ├── hub/             # Hub entrypoint
 │   └── agent/           # Agent entrypoint
 ├── internal/
 │   ├── api/             # Shared protobuf definitions and gRPC service interfaces
-│   ├── hub/             # Hub business logic
 │   ├── agent/           # Agent business logic
 │   └── config/          # Shared configuration types
 ├── pkg/
-│   └── docker/          # Docker/Swarm API client (Hub only)
+│   └── docker/          # Docker API client (used by every Agent)
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   └── adr/
 ├── docker-compose.yml
-├── Dockerfile.hub
 ├── Dockerfile.agent
-├── .github/workflows/
 ├── CONTEXT.md
 ├── AGENTS.md
 └── README.md
