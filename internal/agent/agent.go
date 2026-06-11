@@ -57,6 +57,14 @@ func (a *Agent) WriteRouteConfig(serviceName, configYAML string) error {
 	}
 
 	path := filepath.Join(a.configDir, serviceName+".yml")
+
+	if existing, err := os.ReadFile(path); err == nil && string(existing) == configYAML {
+		a.mu.Lock()
+		a.activeRoutes[serviceName] = true
+		a.mu.Unlock()
+		return nil
+	}
+
 	if err := os.WriteFile(path, []byte(configYAML), 0644); err != nil {
 		return fmt.Errorf("write config file: %w", err)
 	}
@@ -116,5 +124,5 @@ func (a *Agent) ApplyConfig(configs map[string]string) {
 		}
 	}
 
-	log.Printf("ApplyConfig: %d configs written, %d services active", len(configs), len(a.GetActiveServices()))
+	log.Printf("ApplyConfig: %d configs processed, %d services active", len(configs), len(a.GetActiveServices()))
 }
