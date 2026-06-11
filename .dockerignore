@@ -1,7 +1,0 @@
-.git/
-.gitignore
-*.exe
-*.log
-test/
-README.md
-ARCHITECTURE.md
