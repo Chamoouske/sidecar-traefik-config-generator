@@ -31,6 +31,11 @@
 4. **Weighted routing** — local routes (weight 9) vs cross-node routes (weight 1) to prevent loops.
 5. **Safety net polling** — Agent polls Hub every 60s as eventual consistency fallback.
 
+## Mandatory Practices
+
+- **TDD (Test-Driven Development)** — write the test first, then implement, then refactor. No code is accepted without a corresponding test. This is not optional.
+- **DDD (Domain-Driven Design)** — the codebase must reflect the domain language defined in `CONTEXT.md`. Ubiquitous language, bounded contexts, and aggregates must be respected.
+
 ## Code Conventions
 
 - **Language:** Go
