@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
 
 	"github.com/chamoouske/traefik-sidecar/internal/agent"
 	"github.com/chamoouske/traefik-sidecar/internal/config"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func main() {
@@ -28,6 +32,23 @@ func main() {
 	if nodeHostIP == "" {
 		log.Fatal("TRAEFIK_SIDECAR_NODE_HOST_IP is required (set via env or ensure host has a non-loopback IP)")
 	}
+
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+
+	healthGrpc := grpc.NewServer()
+	grpc_health_v1.RegisterHealthServer(healthGrpc, healthServer)
+
+	healthLis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.AgentPort))
+	if err != nil {
+		log.Fatalf("health listen: %v", err)
+	}
+	go func() {
+		log.Printf("agent health endpoint on :%d", cfg.AgentPort)
+		if err := healthGrpc.Serve(healthLis); err != nil {
+			log.Fatalf("health serve: %v", err)
+		}
+	}()
 
 	a := agent.New(&agent.Config{
 		ConfigDir: cfg.ConfigDir,
