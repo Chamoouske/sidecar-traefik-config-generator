@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,7 @@ type Config struct {
 	PollInterval time.Duration
 	PUID         string
 	GUID         string
+	Peers        []string
 }
 
 func defaults() Config {
@@ -60,6 +62,14 @@ func Load() (*Config, error) {
 	}
 	if v, ok := os.LookupEnv("TRAEFIK_SIDECAR_GUID"); ok {
 		cfg.GUID = v
+	}
+	if v, ok := os.LookupEnv("TRAEFIK_SIDECAR_PEERS"); ok {
+		for _, p := range strings.Split(v, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				cfg.Peers = append(cfg.Peers, p)
+			}
+		}
 	}
 
 	return &cfg, nil

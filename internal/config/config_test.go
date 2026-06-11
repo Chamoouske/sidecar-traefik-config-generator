@@ -92,6 +92,28 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 }
 
+func TestLoadPeers(t *testing.T) {
+	restore := setEnv(t, map[string]string{
+		"TRAEFIK_SIDECAR_PEERS": "192.168.1.10, 192.168.1.20, ,,",
+	})
+	defer restore()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cfg.Peers) != 2 {
+		t.Fatalf("expected 2 peers, got %d: %v", len(cfg.Peers), cfg.Peers)
+	}
+	if cfg.Peers[0] != "192.168.1.10" {
+		t.Errorf("expected first peer 192.168.1.10, got %s", cfg.Peers[0])
+	}
+	if cfg.Peers[1] != "192.168.1.20" {
+		t.Errorf("expected second peer 192.168.1.20, got %s", cfg.Peers[1])
+	}
+}
+
 func TestLoadInvalidPollInterval(t *testing.T) {
 	restore := setEnv(t, map[string]string{
 		"TRAEFIK_SIDECAR_POLL_INTERVAL": "not-a-duration",

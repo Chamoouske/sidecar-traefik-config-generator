@@ -33,10 +33,13 @@ Periodic full-state exchange between Agents (default: 60s) that verifies all pee
 Topology where every Agent maintains a direct gRPC connection to every other Agent in the cluster. A new Agent discovers existing peers via mDNS and establishes connections immediately.
 
 ### mDNS (multicast DNS)
-Zero-configuration discovery protocol used by Agents to find each other on the local network. Each Agent announces its service type (`_traefik-sidecar._tcp`) and listens for peer announcements.
+Zero-configuration discovery protocol used by Agents to find each other on the local network. Each Agent announces its service type (`_traefik-sidecar._tcp`) and listens for peer announcements. Limited to a single LAN segment; does not work across subnets, WAN, or out of Docker Desktop's VM.
+
+### Static peer
+A peer configured explicitly via `TRAEFIK_SIDECAR_PEERS` environment variable. Used when mDNS is unavailable (Docker Desktop, cross-subnet). Bypasses the hostname comparison guard — both sides always dial.
 
 ### Peer
-Another Agent instance in the mesh, discovered via mDNS.
+Another Agent instance in the mesh, discovered via mDNS or configured statically.
 
 ### gRPC bidirectional stream
 Persistent connection between two Agents, used for real-time exchange of `ContainerReport` messages. Each Agent sends its local container list and receives peer container lists on the same stream.

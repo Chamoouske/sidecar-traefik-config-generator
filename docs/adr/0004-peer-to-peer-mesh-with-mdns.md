@@ -77,7 +77,8 @@ Negative:
 
 ## Mitigations
 
-- mDNS scope limitation is acceptable: the target deployment is a single LAN (or VPN) per environment
+- mDNS scope limitation is mitigated via `TRAEFIK_SIDECAR_PEERS` environment variable — static peer IPs can be configured for cross-host, Docker Desktop, or multi-subnet scenarios
+- On Docker Desktop, `network_mode: host` does not expose the container to the physical network the same way as on Linux; the agent must use bridge networking with explicit port mapping and `TRAEFIK_SIDECAR_NODE_HOST_IP` set to the host's LAN IP
 - Each Agent only has access to its own node's Docker socket, not the entire cluster
 - Safety net polling detects and corrects disagreements within 60s maximum
 

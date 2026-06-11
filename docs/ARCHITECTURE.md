@@ -56,7 +56,7 @@ The Agent is the **sole authority** on its own containers — no other component
 
 ## Communication
 
-### mDNS Discovery
+### mDNS Discovery (LAN only)
 
 When an Agent starts, it:
 
@@ -65,6 +65,36 @@ When an Agent starts, it:
 3. For each discovered peer host, attempts a gRPC connection
 
 Re-discovery runs periodically to detect new peers joining the network.
+
+mDNS is link-local multicast and works within a single LAN segment. It does **not** work across subnets, WAN, or out of Docker Desktop's VM (WSL2/Hyper-V).
+
+### Static Peers (cross-host / Docker Desktop)
+
+For environments where mDNS is unavailable (Docker Desktop, multi-subnet, WAN), peers can be configured statically via the `TRAEFIK_SIDECAR_PEERS` environment variable:
+
+```yaml
+TRAEFIK_SIDECAR_PEERS: 192.168.1.20,192.168.1.30
+```
+
+Static peers bypass the hostname comparison guard and connect immediately. mDNS continues to work in parallel for LAN-discoverable peers.
+
+When running the Agent on **Docker Desktop** (Windows/Mac), additional configuration is needed:
+
+- Set `TRAEFIK_SIDECAR_NODE_HOST_IP` to the **host machine's LAN IP** (not the VM's internal IP)
+- Expose the gRPC port explicitly (since `network_mode: host` does not bridge mDNS or ports to the physical network):
+
+```yaml
+agent:
+  ports:
+    - target: 9090
+      published: 9090
+  network_mode: ""   # bridge mode
+  environment:
+    TRAEFIK_SIDECAR_NODE_HOST_IP: 192.168.1.10   # Windows/Mac host LAN IP
+    TRAEFIK_SIDECAR_PEERS: 192.168.1.20          # Linux peer IP
+```
+
+On **Linux hosts**, `network_mode: host` works correctly — the Agent listens directly on the host's network and mDNS multicasts reach the physical LAN.
 
 ### gRPC Bidirectional Stream (Peer-to-Peer)
 

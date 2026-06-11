@@ -97,11 +97,15 @@ func main() {
 	}
 	defer mdnsServer.Shutdown()
 
-	log.Printf("agent %s (%s) started, watching for peers via mDNS", hostname, nodeHostIP)
-
 	ctx := context.Background()
 
-	// discover and connect to peers
+	// connect to statically configured peers (no hostname guard — explicit config)
+	for _, peerIP := range cfg.Peers {
+		log.Printf("connecting to static peer %s", peerIP)
+		mesh.AddOutgoingPeer(peerIP, ctx)
+	}
+
+	// discover peers via mDNS
 	peerCh := agent.WatchPeers(ctx, hostname, mdnsService, cfg.PollInterval)
 
 	go func() {
@@ -117,6 +121,8 @@ func main() {
 			mesh.AddOutgoingPeer(peer.IP, ctx)
 		}
 	}()
+
+	log.Printf("agent %s (%s) started with %d static peer(s), watching for peers via mDNS", hostname, nodeHostIP, len(cfg.Peers))
 
 	// event loop (blocking)
 	mesh.RunEventLoop(ctx)
