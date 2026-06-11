@@ -12,11 +12,12 @@ import (
 )
 
 type RealClient struct {
-	host   string
-	ctx    context.Context
-	cancel context.CancelFunc
-	events chan Event
-	client *http.Client
+	host       string
+	ctx        context.Context
+	cancel     context.CancelFunc
+	events     chan Event
+	client     *http.Client
+	apiVersion string
 }
 
 func NewClient(host string) (*RealClient, error) {
@@ -30,13 +31,36 @@ func NewClient(host string) (*RealClient, error) {
 		},
 	}
 
-	return &RealClient{
+	rc := &RealClient{
 		host:   host,
 		ctx:    ctx,
 		cancel: cancel,
 		events: make(chan Event, 64),
 		client: &http.Client{Transport: transport},
-	}, nil
+	}
+
+	if err := rc.negotiateVersion(); err != nil {
+		return nil, fmt.Errorf("negotiate docker api version: %w", err)
+	}
+
+	return rc, nil
+}
+
+func (r *RealClient) negotiateVersion() error {
+	body, err := r.doGet("/version")
+	if err != nil {
+		return err
+	}
+
+	var ver struct {
+		APIVersion string `json:"ApiVersion"`
+	}
+	if err := json.Unmarshal(body, &ver); err != nil {
+		return fmt.Errorf("parse version response: %w", err)
+	}
+
+	r.apiVersion = ver.APIVersion
+	return nil
 }
 
 func (r *RealClient) doGet(path string) ([]byte, error) {
@@ -65,7 +89,7 @@ func (r *RealClient) doGet(path string) ([]byte, error) {
 }
 
 func (r *RealClient) ListContainers() ([]Container, error) {
-	body, err := r.doGet("/v1.48/containers/json?all=false")
+	body, err := r.doGet("/" + r.apiVersion + "/containers/json?all=false")
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +125,7 @@ func (r *RealClient) watchEvents() {
 	}
 	defer conn.Close()
 
-	req := "GET /v1.48/events HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\n\r\n"
+	req := "GET /" + r.apiVersion + "/events HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\n\r\n"
 	if _, err := conn.Write([]byte(req)); err != nil {
 		return
 	}
