@@ -108,7 +108,7 @@ services:
       labels:
         - "traefik.enable=false"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:9090/status"]
+      test: ["CMD", "/bin/grpc_health_probe", "-addr=:9090"]
       interval: 15s
       timeout: 5s
       retries: 3
