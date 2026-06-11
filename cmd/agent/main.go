@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"os"
 
 	"github.com/chamoouske/traefik-sidecar/internal/agent"
@@ -22,7 +23,10 @@ func main() {
 
 	nodeHostIP := os.Getenv("TRAEFIK_SIDECAR_NODE_HOST_IP")
 	if nodeHostIP == "" {
-		log.Fatal("TRAEFIK_SIDECAR_NODE_HOST_IP is required")
+		nodeHostIP = detectHostIP()
+	}
+	if nodeHostIP == "" {
+		log.Fatal("TRAEFIK_SIDECAR_NODE_HOST_IP is required (set via env or ensure host has a non-loopback IP)")
 	}
 
 	a := agent.New(&agent.Config{
@@ -32,8 +36,43 @@ func main() {
 	client := agent.NewStreamClient(cfg, a)
 	ctx := context.Background()
 
-	log.Printf("agent %s starting, connecting to hub at %s", hostname, cfg.HubAddr)
+	log.Printf("agent %s starting on %s, connecting to hub at %s", hostname, nodeHostIP, cfg.HubAddr)
 	if err := client.Run(ctx, hostname, nodeHostIP); err != nil {
 		log.Fatalf("agent: %v", err)
 	}
 }
+
+func detectHostIP() string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			if ipnet.IP.To4() == nil {
+				continue
+			}
+			return ipnet.IP.String()
+		}
+	}
+
+	return ""
+}
+
