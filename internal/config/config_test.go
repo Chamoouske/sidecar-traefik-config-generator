@@ -47,9 +47,6 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ConfigDir != "/etc/traefik-sidecar" {
 		t.Errorf("expected ConfigDir /etc/traefik-sidecar, got %s", cfg.ConfigDir)
 	}
-	if cfg.TraefikPort != 80 {
-		t.Errorf("expected TraefikPort 80, got %d", cfg.TraefikPort)
-	}
 	if cfg.AgentPort != 9090 {
 		t.Errorf("expected AgentPort 9090, got %d", cfg.AgentPort)
 	}
@@ -60,7 +57,6 @@ func TestLoadFromEnv(t *testing.T) {
 		"TRAEFIK_SIDECAR_DOCKER_HOST":    "tcp://192.168.1.100:2375",
 		"TRAEFIK_SIDECAR_LOG_LEVEL":      "debug",
 		"TRAEFIK_SIDECAR_CONFIG_DIR":     "/custom/path",
-		"TRAEFIK_SIDECAR_TRAEFIK_PORT":   "443",
 		"TRAEFIK_SIDECAR_AGENT_PORT":     "9999",
 		"TRAEFIK_SIDECAR_POLL_INTERVAL":  "30s",
 		"TRAEFIK_SIDECAR_PUID":           "2000",
@@ -81,9 +77,6 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 	if cfg.ConfigDir != "/custom/path" {
 		t.Errorf("expected ConfigDir /custom/path, got %s", cfg.ConfigDir)
-	}
-	if cfg.TraefikPort != 443 {
-		t.Errorf("expected TraefikPort 443, got %d", cfg.TraefikPort)
 	}
 	if cfg.AgentPort != 9999 {
 		t.Errorf("expected AgentPort 9999, got %d", cfg.AgentPort)
@@ -111,14 +104,4 @@ func TestLoadInvalidPollInterval(t *testing.T) {
 	}
 }
 
-func TestLoadInvalidTraefikPort(t *testing.T) {
-	restore := setEnv(t, map[string]string{
-		"TRAEFIK_SIDECAR_TRAEFIK_PORT": "not-a-number",
-	})
-	defer restore()
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error for invalid port")
-	}
-}

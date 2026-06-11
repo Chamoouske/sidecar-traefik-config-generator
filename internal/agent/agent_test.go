@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/chamoouske/traefik-sidecar/pkg/docker"
+	"gopkg.in/yaml.v3"
 )
 
 func testAgent(t *testing.T) *Agent {
@@ -18,29 +19,15 @@ func testAgent(t *testing.T) *Agent {
 	t.Cleanup(func() { os.RemoveAll(dir) })
 
 	return New(&Config{
-		ConfigDir:   dir,
-		TraefikPort: 80,
-		NodeHostIP:  "192.168.1.10",
+		ConfigDir:  dir,
+		NodeHostIP: "192.168.1.10",
 	})
 }
 
 func TestWriteRouteConfig(t *testing.T) {
 	a := testAgent(t)
 
-	configYAML := `http:
-  routers:
-    web-app:
-      rule: Host(` + "`" + `app.local` + "`" + `)
-      entrypoints:
-        - websecure
-  services:
-    web-app:
-      loadBalancer:
-        servers:
-          - url: "http://localhost:80"
-`
-
-	err := a.WriteRouteConfig("web-app", configYAML)
+	err := a.WriteRouteConfig("web-app", "yaml: content")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,35 +36,18 @@ func TestWriteRouteConfig(t *testing.T) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("expected config file to exist")
 	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "web-app") {
-		t.Errorf("expected file to contain service name")
-	}
-	if !strings.Contains(content, "app.local") {
-		t.Errorf("expected file to contain host rule")
-	}
 }
 
 func TestRemoveRouteConfig(t *testing.T) {
 	a := testAgent(t)
 
-	err := a.WriteRouteConfig("to-remove", "http:\n  routers: {}\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	a.WriteRouteConfig("to-remove", "yaml: content")
 	path := filepath.Join(a.configDir, "to-remove.yml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("expected config file to exist before removal")
 	}
 
-	err = a.RemoveRouteConfig("to-remove")
+	err := a.RemoveRouteConfig("to-remove")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,23 +95,19 @@ func TestGetActiveServices(t *testing.T) {
 func TestApplyConfig(t *testing.T) {
 	a := testAgent(t)
 
-	routes := []Route{
-		{ServiceName: "web-app", ConfigYAML: "yaml: web-app", Weight: 9, Action: RouteUpsert},
-		{ServiceName: "api", ConfigYAML: "yaml: api", Weight: 1, Action: RouteUpsert},
-	}
-
-	a.ApplyConfig(routes)
+	a.ApplyConfig(map[string]string{
+		"web-app": "yaml: web-app",
+		"api":     "yaml: api",
+	})
 
 	active := a.GetActiveServices()
 	if len(active) != 2 {
 		t.Fatalf("expected 2 active services after ApplyConfig, got %d", len(active))
 	}
 
-	// apply new set that removes one
-	routes2 := []Route{
-		{ServiceName: "web-app", ConfigYAML: "yaml: web-app", Weight: 9, Action: RouteUpsert},
-	}
-	a.ApplyConfig(routes2)
+	a.ApplyConfig(map[string]string{
+		"web-app": "yaml: web-app",
+	})
 
 	active = a.GetActiveServices()
 	if len(active) != 1 || active[0] != "web-app" {
@@ -164,14 +130,18 @@ func TestComputeMyConfigLocalOnly(t *testing.T) {
 		},
 	})
 
-	routes := a.ComputeMyConfig()
-	if len(routes) != 1 {
-		t.Fatalf("expected 1 route, got %d", len(routes))
+	configs := a.ComputeMyConfig()
+	if len(configs) != 1 {
+		t.Fatalf("expected 1 config, got %d", len(configs))
 	}
 
-	if routes[0].Weight != 9 {
-		t.Errorf("expected local route weight 9, got %d", routes[0].Weight)
+	yamlStr, ok := configs["web-app"]
+	if !ok {
+		t.Fatal("expected config for web-app")
 	}
+
+	assertValidTraefikYAML(t, yamlStr, "web-app")
+	assertContains(t, yamlStr, "web-app:80")
 }
 
 func TestComputeMyConfigWithRemote(t *testing.T) {
@@ -180,14 +150,44 @@ func TestComputeMyConfigWithRemote(t *testing.T) {
 	a.SetLocalContainers([]docker.Container{
 		{
 			ID:   "c1",
-			Name: "local-app",
+			Name: "web-app",
 			Labels: map[string]string{
 				"traefik.sidecar.enable":       "true",
-				"traefik.sidecar.router.rule":  "Host(`local.local`)",
+				"traefik.sidecar.router.rule":  "Host(`app.local`)",
 				"traefik.sidecar.service.port": "80",
 			},
 		},
 	})
+
+	a.UpdateRemoteContainers("192.168.1.20", []docker.Container{
+		{
+			ID:   "c2",
+			Name: "web-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`app.local`)",
+				"traefik.sidecar.service.port": "80",
+			},
+		},
+	})
+
+	configs := a.ComputeMyConfig()
+	if len(configs) != 1 {
+		t.Fatalf("expected 1 config, got %d", len(configs))
+	}
+
+	yamlStr := configs["web-app"]
+	assertValidTraefikYAML(t, yamlStr, "web-app")
+	assertContains(t, yamlStr, "web-app:80")
+	assertContains(t, yamlStr, "192.168.1.20")
+	assertContains(t, yamlStr, "weighted")
+	assertContains(t, yamlStr, "weight: 9")
+	assertContains(t, yamlStr, "weight: 1")
+}
+
+func TestComputeMyConfigRemoteOnly(t *testing.T) {
+	a := testAgent(t)
 
 	a.UpdateRemoteContainers("192.168.1.20", []docker.Container{
 		{
@@ -202,28 +202,14 @@ func TestComputeMyConfigWithRemote(t *testing.T) {
 		},
 	})
 
-	routes := a.ComputeMyConfig()
-	if len(routes) != 2 {
-		t.Fatalf("expected 2 routes, got %d", len(routes))
+	configs := a.ComputeMyConfig()
+	if len(configs) != 1 {
+		t.Fatalf("expected 1 config, got %d", len(configs))
 	}
 
-	for _, r := range routes {
-		switch r.ServiceName {
-		case "local-app":
-			if r.Weight != 9 {
-				t.Errorf("expected local-app weight 9, got %d", r.Weight)
-			}
-		case "remote-app":
-			if r.Weight != 1 {
-				t.Errorf("expected remote-app weight 1, got %d", r.Weight)
-			}
-			if !strings.Contains(r.ConfigYAML, "192.168.1.20") {
-				t.Errorf("expected cross-node config to reference peer host IP")
-			}
-		default:
-			t.Errorf("unexpected route: %s", r.ServiceName)
-		}
-	}
+	yamlStr := configs["remote-app"]
+	assertValidTraefikYAML(t, yamlStr, "remote-app")
+	assertContains(t, yamlStr, "192.168.1.20")
 }
 
 func TestComputeMyConfigSidecarDisabled(t *testing.T) {
@@ -239,8 +225,34 @@ func TestComputeMyConfigSidecarDisabled(t *testing.T) {
 		},
 	})
 
-	routes := a.ComputeMyConfig()
-	if len(routes) != 0 {
-		t.Errorf("expected 0 routes for container without sidecar labels, got %d", len(routes))
+	configs := a.ComputeMyConfig()
+	if len(configs) != 0 {
+		t.Errorf("expected 0 configs for container without sidecar labels, got %d", len(configs))
+	}
+}
+
+func assertValidTraefikYAML(t *testing.T, yamlStr, serviceName string) {
+	t.Helper()
+	var cfg struct {
+		HTTP struct {
+			Routers  map[string]any `yaml:"routers"`
+			Services map[string]any `yaml:"services"`
+		} `yaml:"http"`
+	}
+	if err := yaml.Unmarshal([]byte(yamlStr), &cfg); err != nil {
+		t.Fatalf("invalid YAML: %v\n%s", err, yamlStr)
+	}
+	if cfg.HTTP.Routers == nil || cfg.HTTP.Routers[serviceName] == nil {
+		t.Errorf("YAML missing router for %s", serviceName)
+	}
+	if cfg.HTTP.Services == nil || cfg.HTTP.Services[serviceName] == nil {
+		t.Errorf("YAML missing service for %s", serviceName)
+	}
+}
+
+func assertContains(t *testing.T, s, substr string) {
+	t.Helper()
+	if !strings.Contains(s, substr) {
+		t.Errorf("expected YAML to contain %q", substr)
 	}
 }

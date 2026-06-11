@@ -94,8 +94,8 @@ func (m *MeshManager) Connect(stream api.SidecarService_ConnectServer) error {
 		delete(m.incomingPeers, peerIP)
 		m.mu.Unlock()
 		m.agent.RemovePeer(peerIP)
-		routes := m.agent.ComputeMyConfig()
-		m.agent.ApplyConfig(routes)
+		configs := m.agent.ComputeMyConfig()
+		m.agent.ApplyConfig(configs)
 	}()
 
 	go pc.runSendLoop(stream)
@@ -110,6 +110,15 @@ func (m *MeshManager) Connect(stream api.SidecarService_ConnectServer) error {
 		}
 		pc.handleReport(msg)
 	}
+}
+
+func (m *MeshManager) refreshLocalState() {
+	containers, err := m.docker.ListContainers()
+	if err != nil {
+		log.Printf("list local containers: %v", err)
+		return
+	}
+	m.agent.SetLocalContainers(containers)
 }
 
 func (m *MeshManager) sendReportToAll() {
@@ -132,6 +141,13 @@ func (m *MeshManager) sendReportToAll() {
 	}
 }
 
+func (m *MeshManager) syncAndApply() {
+	m.refreshLocalState()
+	m.sendReportToAll()
+	configs := m.agent.ComputeMyConfig()
+	m.agent.ApplyConfig(configs)
+}
+
 func (m *MeshManager) RunEventLoop(ctx context.Context) {
 	events, err := m.docker.Events()
 	if err != nil {
@@ -141,10 +157,8 @@ func (m *MeshManager) RunEventLoop(ctx context.Context) {
 	pollTicker := time.NewTicker(m.cfg.PollInterval)
 	defer pollTicker.Stop()
 
-	// initial report
-	m.sendReportToAll()
-	routes := m.agent.ComputeMyConfig()
-	m.agent.ApplyConfig(routes)
+	// initial sync
+	m.syncAndApply()
 
 	for {
 		select {
@@ -153,13 +167,11 @@ func (m *MeshManager) RunEventLoop(ctx context.Context) {
 		case evt := <-events:
 			switch evt.Type {
 			case docker.EventContainerStart, docker.EventContainerDie, docker.EventContainerDestroy:
-				m.sendReportToAll()
-				routes := m.agent.ComputeMyConfig()
-				m.agent.ApplyConfig(routes)
+				m.syncAndApply()
 			}
 		case <-pollTicker.C:
 			log.Print("safety net: full state sync")
-			m.sendReportToAll()
+			m.syncAndApply()
 		}
 	}
 }
@@ -181,7 +193,7 @@ func (m *MeshManager) AddOutgoingPeer(peerIP string, ctx context.Context) {
 		delete(m.outgoingPeers, peerIP)
 		m.mu.Unlock()
 		m.agent.RemovePeer(peerIP)
-		routes := m.agent.ComputeMyConfig()
-		m.agent.ApplyConfig(routes)
+		configs := m.agent.ComputeMyConfig()
+		m.agent.ApplyConfig(configs)
 	}()
 }

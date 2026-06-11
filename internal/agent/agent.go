@@ -10,15 +10,13 @@ import (
 )
 
 type Config struct {
-	ConfigDir   string
-	TraefikPort int
-	NodeHostIP  string
+	ConfigDir  string
+	NodeHostIP string
 }
 
 type Agent struct {
 	mu               sync.RWMutex
 	configDir        string
-	traefikPort      int
 	nodeHostIP       string
 	activeRoutes     map[string]bool
 	localContainers  []docker.Container
@@ -28,7 +26,6 @@ type Agent struct {
 func New(cfg *Config) *Agent {
 	return &Agent{
 		configDir:        cfg.ConfigDir,
-		traefikPort:      cfg.TraefikPort,
 		nodeHostIP:       cfg.NodeHostIP,
 		activeRoutes:     make(map[string]bool),
 		remoteContainers: make(map[string][]docker.Container),
@@ -98,17 +95,16 @@ func (a *Agent) GetActiveServices() []string {
 	return result
 }
 
-func (a *Agent) ApplyConfig(routes []Route) {
-	written := make(map[string]bool)
+func (a *Agent) ApplyConfig(configs map[string]string) {
+	for name, yamlStr := range configs {
+		if err := a.WriteRouteConfig(name, yamlStr); err != nil {
+			continue
+		}
+	}
 
-	for _, r := range routes {
-		if r.Action != RouteUpsert {
-			continue
-		}
-		if err := a.WriteRouteConfig(r.ServiceName, r.ConfigYAML); err != nil {
-			continue
-		}
-		written[r.ServiceName] = true
+	written := make(map[string]bool)
+	for name := range configs {
+		written[name] = true
 	}
 
 	for _, s := range a.GetActiveServices() {

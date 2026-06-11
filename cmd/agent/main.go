@@ -51,9 +51,8 @@ func main() {
 	defer dockerClient.Close()
 
 	a := agent.New(&agent.Config{
-		ConfigDir:   cfg.ConfigDir,
-		TraefikPort: cfg.TraefikPort,
-		NodeHostIP:  nodeHostIP,
+		ConfigDir:  cfg.ConfigDir,
+		NodeHostIP: nodeHostIP,
 	})
 
 	mesh := agent.NewMeshManager(cfg, a, dockerClient, hostname, nodeHostIP)

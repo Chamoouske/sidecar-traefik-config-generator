@@ -11,7 +11,6 @@ type Config struct {
 	DockerHost   string
 	LogLevel     string
 	ConfigDir    string
-	TraefikPort  int
 	AgentPort    int
 	PollInterval time.Duration
 	PUID         string
@@ -23,7 +22,6 @@ func defaults() Config {
 		DockerHost:   "unix:///var/run/docker.sock",
 		LogLevel:     "info",
 		ConfigDir:    "/etc/traefik-sidecar",
-		TraefikPort:  80,
 		AgentPort:    9090,
 		PollInterval: 60 * time.Second,
 		PUID:         "1000",
@@ -42,13 +40,6 @@ func Load() (*Config, error) {
 	}
 	if v, ok := os.LookupEnv("TRAEFIK_SIDECAR_CONFIG_DIR"); ok {
 		cfg.ConfigDir = v
-	}
-	if v, ok := os.LookupEnv("TRAEFIK_SIDECAR_TRAEFIK_PORT"); ok {
-		port, err := strconv.Atoi(v)
-		if err != nil {
-			return nil, fmt.Errorf("invalid TRAEFIK_SIDECAR_TRAEFIK_PORT: %w", err)
-		}
-		cfg.TraefikPort = port
 	}
 	if v, ok := os.LookupEnv("TRAEFIK_SIDECAR_AGENT_PORT"); ok {
 		port, err := strconv.Atoi(v)
