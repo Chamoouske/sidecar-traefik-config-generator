@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -159,6 +160,8 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 			})
 		}
 	}
+
+	log.Printf("ComputeMyConfig: %d local containers, %d remote peers", len(localContainers), len(remotes))
 
 	result := make(map[string]string, len(services))
 

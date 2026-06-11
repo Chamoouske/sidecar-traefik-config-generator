@@ -52,6 +52,8 @@ func (p *peerConn) SendReport(dockerClient docker.Client) {
 		})
 	}
 
+	log.Printf("sending report to peer %s: %d containers", p.peerIP, len(containers))
+
 	msg := &api.PeerMessage{
 		Payload: &api.PeerMessage_ContainerReport{
 			ContainerReport: &api.ContainerReport{
@@ -96,8 +98,10 @@ func (p *peerConn) handleReport(msg *api.PeerMessage) {
 		})
 	}
 
+	log.Printf("received report from peer %s: %d containers", p.peerIP, len(containers))
 	p.agent.UpdateRemoteContainers(p.peerIP, containers)
 	routes := p.agent.ComputeMyConfig()
+	log.Printf("recomputed configs after peer report: %d services", len(routes))
 	p.agent.ApplyConfig(routes)
 }
 
@@ -185,12 +189,9 @@ func (p *OutgoingPeer) connectAndStream(ctx context.Context, nodeName, nodeHostI
 	p.peerName = connectResp.NodeName
 	log.Printf("connected to peer %s (%s)", p.peerName, p.peerIP)
 
-	go p.runSendLoop(stream)
+	log.Printf("stream established with peer %s (%s), entering receive loop", p.peerName, p.peerIP)
 
-	// send initial report
-	// Note: SendReport is called externally after Run returns, via the
-	// MeshManager's event loop. But we need the initial sync here.
-	// The MeshManager will call SendReport on all peers after starting them.
+	go p.runSendLoop(stream)
 
 	// receive loop
 	for {

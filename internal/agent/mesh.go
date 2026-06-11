@@ -89,12 +89,17 @@ func (m *MeshManager) Connect(stream api.SidecarService_ConnectServer) error {
 	m.incomingPeers[peerIP] = pc
 	m.mu.Unlock()
 
+	// send our local state to the new peer immediately
+	pc.SendReport(m.docker)
+
 	defer func() {
+		log.Printf("peer %s (%s) disconnected", peerName, peerIP)
 		m.mu.Lock()
 		delete(m.incomingPeers, peerIP)
 		m.mu.Unlock()
 		m.agent.RemovePeer(peerIP)
 		configs := m.agent.ComputeMyConfig()
+		log.Printf("peer gone, recomputed %d configs", len(configs))
 		m.agent.ApplyConfig(configs)
 	}()
 
@@ -119,6 +124,7 @@ func (m *MeshManager) refreshLocalState() {
 		return
 	}
 	m.agent.SetLocalContainers(containers)
+	log.Printf("refreshed local state: %d containers", len(containers))
 }
 
 func (m *MeshManager) sendReportToAll() {
@@ -133,6 +139,8 @@ func (m *MeshManager) sendReportToAll() {
 	}
 	m.mu.RUnlock()
 
+	log.Printf("sending report to %d outgoing + %d incoming peers", len(outgoing), len(incoming))
+
 	for _, p := range outgoing {
 		p.SendReport(m.docker)
 	}
@@ -142,9 +150,11 @@ func (m *MeshManager) sendReportToAll() {
 }
 
 func (m *MeshManager) syncAndApply() {
+	log.Print("syncAndApply: refreshing local state")
 	m.refreshLocalState()
 	m.sendReportToAll()
 	configs := m.agent.ComputeMyConfig()
+	log.Printf("syncAndApply: computed %d service configs, applying", len(configs))
 	m.agent.ApplyConfig(configs)
 }
 
@@ -165,9 +175,12 @@ func (m *MeshManager) RunEventLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case evt := <-events:
+			log.Printf("docker event: type=%d container=%s", evt.Type, evt.ContainerID)
 			switch evt.Type {
 			case docker.EventContainerStart, docker.EventContainerDie, docker.EventContainerDestroy:
 				m.syncAndApply()
+			default:
+				log.Printf("ignoring event type %d", evt.Type)
 			}
 		case <-pollTicker.C:
 			log.Print("safety net: full state sync")
@@ -180,20 +193,28 @@ func (m *MeshManager) AddOutgoingPeer(peerIP string, ctx context.Context) {
 	m.mu.Lock()
 	if _, ok := m.outgoingPeers[peerIP]; ok {
 		m.mu.Unlock()
+		log.Printf("outgoing peer %s already exists, skipping", peerIP)
 		return
 	}
+
+	log.Printf("adding outgoing peer %s", peerIP)
 
 	peer := NewOutgoingPeer(peerIP, m.agent, m.cfg.AgentPort)
 	m.outgoingPeers[peerIP] = peer
 	m.mu.Unlock()
 
+	// send our local state to the new peer (queued until connection is established)
+	peer.SendReport(m.docker)
+
 	go func() {
 		peer.Run(ctx, m.nodeName, m.nodeHostIP)
+		log.Printf("outgoing peer %s disconnected, cleaning up", peerIP)
 		m.mu.Lock()
 		delete(m.outgoingPeers, peerIP)
 		m.mu.Unlock()
 		m.agent.RemovePeer(peerIP)
 		configs := m.agent.ComputeMyConfig()
+		log.Printf("peer gone, recomputed %d configs", len(configs))
 		m.agent.ApplyConfig(configs)
 	}()
 }

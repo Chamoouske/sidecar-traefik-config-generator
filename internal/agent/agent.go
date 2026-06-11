@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -98,6 +99,7 @@ func (a *Agent) GetActiveServices() []string {
 func (a *Agent) ApplyConfig(configs map[string]string) {
 	for name, yamlStr := range configs {
 		if err := a.WriteRouteConfig(name, yamlStr); err != nil {
+			log.Printf("error writing config for %s: %v", name, err)
 			continue
 		}
 	}
@@ -109,7 +111,10 @@ func (a *Agent) ApplyConfig(configs map[string]string) {
 
 	for _, s := range a.GetActiveServices() {
 		if !written[s] {
+			log.Printf("removing stale config for %s", s)
 			a.RemoveRouteConfig(s)
 		}
 	}
+
+	log.Printf("ApplyConfig: %d configs written, %d services active", len(configs), len(a.GetActiveServices()))
 }
