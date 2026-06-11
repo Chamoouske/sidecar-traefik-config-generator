@@ -14,11 +14,10 @@ func (h *Hub) RunEventLoop(svc *ServiceServer) {
 	}
 
 	for evt := range events {
-		log.Printf("docker event: type=%v service=%s", evt.Type, evt.ServiceID)
+		log.Printf("docker event: type=%v container=%s", evt.Type, evt.ContainerID)
 
 		switch evt.Type {
-		case docker.EventServiceCreate, docker.EventServiceUpdate, docker.EventServiceRemove,
-			docker.EventTaskCreate, docker.EventTaskRunning, docker.EventTaskShutdown:
+		case docker.EventContainerStart, docker.EventContainerDie, docker.EventContainerDestroy:
 			h.dispatchConfigs(svc)
 		}
 	}
@@ -46,16 +45,11 @@ func (h *Hub) dispatchConfigs(svc *ServiceServer) {
 			msg := &api.HubToAgent{
 				Payload: &api.HubToAgent_RouteCommand{
 					RouteCommand: &api.RouteCommand{
-						Action:            action,
-						ServiceName:       route.ServiceName,
-						ConfigYaml:        route.ConfigYAML,
-						TargetNodeHostIps: []string{},
+						Action:      action,
+						ServiceName: route.ServiceName,
+						ConfigYaml:  route.ConfigYAML,
 					},
 				},
-			}
-
-			if route.TargetNodeHost != "" {
-				msg.GetRouteCommand().TargetNodeHostIps = []string{route.TargetNodeHost}
 			}
 
 			svc.SendToAgent(nc.NodeIP, msg)

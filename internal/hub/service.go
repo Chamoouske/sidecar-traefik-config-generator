@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/chamoouske/traefik-sidecar/internal/api"
+	"github.com/chamoouske/traefik-sidecar/pkg/docker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -136,7 +137,23 @@ func (s *ServiceServer) handleAgentMessage(stream *AgentStream, msg *api.AgentTo
 	case *api.AgentToHub_RouteSync:
 		log.Printf("route sync from %s: %d active services", stream.NodeName, len(p.RouteSync.ActiveServiceNames))
 		s.handleRouteSync(stream, p.RouteSync)
+	case *api.AgentToHub_ContainerReport:
+		log.Printf("container report from %s: %d containers", stream.NodeName, len(p.ContainerReport.Containers))
+		s.handleContainerReport(stream, p.ContainerReport)
 	}
+}
+
+func (s *ServiceServer) handleContainerReport(stream *AgentStream, report *api.ContainerReport) {
+	containers := make([]docker.Container, len(report.Containers))
+	for i, ci := range report.Containers {
+		containers[i] = docker.Container{
+			ID:     ci.ContainerId,
+			Name:   ci.Name,
+			Labels: ci.Labels,
+		}
+	}
+	s.hub.UpdateRemoteContainers(stream.NodeHostIP, containers)
+	s.hub.dispatchConfigs(s)
 }
 
 func (s *ServiceServer) handleRouteSync(stream *AgentStream, req *api.RouteSyncRequest) {

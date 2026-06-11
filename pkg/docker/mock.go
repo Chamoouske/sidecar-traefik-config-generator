@@ -1,45 +1,34 @@
 package docker
 
 import (
-	"fmt"
 	"sync"
 )
 
 type MockClient struct {
-	mu       sync.RWMutex
-	services map[string]Service
-	tasks    map[string]Task
-	nodes    map[string]Node
-	events   chan Event
+	mu         sync.RWMutex
+	containers map[string]Container
+	events     chan Event
 }
 
 func NewMockClient() *MockClient {
 	return &MockClient{
-		services: make(map[string]Service),
-		tasks:    make(map[string]Task),
-		nodes:    make(map[string]Node),
+		containers: make(map[string]Container),
 	}
 }
 
-func (m *MockClient) AddService(id, name string, labels map[string]string) {
+func (m *MockClient) AddContainer(id, name string, labels map[string]string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	m.services[id] = Service{ID: id, Name: name, Labels: labels}
+	m.containers[id] = Container{ID: id, Name: name, Labels: labels, State: "running"}
 }
 
-func (m *MockClient) AddTask(id, serviceID, nodeID string, status TaskStatus) {
+func (m *MockClient) RemoveContainer(id string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.tasks[id] = Task{ID: id, ServiceID: serviceID, NodeID: nodeID, Status: status}
-}
-
-func (m *MockClient) AddNode(id, hostname, hostIP string, role NodeRole) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.nodes[id] = Node{ID: id, Hostname: hostname, HostIP: hostIP, Role: role}
+	delete(m.containers, id)
 }
 
 func (m *MockClient) PublishEvent(evt Event) {
@@ -51,44 +40,12 @@ func (m *MockClient) PublishEvent(evt Event) {
 	}
 }
 
-func (m *MockClient) ListServices() ([]Service, error) {
+func (m *MockClient) ListContainers() ([]Container, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	result := make([]Service, 0, len(m.services))
-	for _, s := range m.services {
-		result = append(result, s)
-	}
-	return result, nil
-}
-
-func (m *MockClient) GetService(id string) (Service, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	s, ok := m.services[id]
-	if !ok {
-		return Service{}, fmt.Errorf("service %s not found", id)
-	}
-	return s, nil
-}
-
-func (m *MockClient) ListTasks(serviceID string) ([]Task, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	result := make([]Task, 0)
-	for _, t := range m.tasks {
-		if t.ServiceID == serviceID {
-			result = append(result, t)
-		}
-	}
-	return result, nil
-}
-
-func (m *MockClient) ListNodes() ([]Node, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	result := make([]Node, 0, len(m.nodes))
-	for _, n := range m.nodes {
-		result = append(result, n)
+	result := make([]Container, 0, len(m.containers))
+	for _, c := range m.containers {
+		result = append(result, c)
 	}
 	return result, nil
 }

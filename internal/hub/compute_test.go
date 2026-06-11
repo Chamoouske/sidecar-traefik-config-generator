@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"os"
 	"testing"
 
 	"github.com/chamoouske/traefik-sidecar/internal/config"
@@ -8,24 +9,74 @@ import (
 )
 
 func TestComputeNodeConfigs(t *testing.T) {
-	mock := docker.NewMockClient()
-	mock.AddNode("node1", "linux-manager", "192.168.1.10", docker.NodeRoleManager)
-	mock.AddNode("node2", "win-worker", "192.168.1.20", docker.NodeRoleWorker)
+	os.Setenv("TRAEFIK_SIDECAR_HUB_HOST_IP", "192.168.1.10")
+	defer os.Unsetenv("TRAEFIK_SIDECAR_HUB_HOST_IP")
 
-	mock.AddService("svc1", "web-app", map[string]string{
+	mock := docker.NewMockClient()
+	mock.AddContainer("c1", "web-app", map[string]string{
 		"traefik.sidecar.enable":       "true",
 		"traefik.sidecar.cross-node":   "true",
 		"traefik.sidecar.router.rule":  "Host(`app.local`)",
 		"traefik.sidecar.service.port": "80",
 	})
-	mock.AddTask("t1", "svc1", "node1", docker.TaskStateRunning)
-	mock.AddTask("t2", "svc1", "node2", docker.TaskStateRunning)
+	mock.AddContainer("c2", "isolated", map[string]string{
+		"traefik.sidecar.enable":       "true",
+		"traefik.sidecar.router.rule":  "Host(`isolated.local`)",
+		"traefik.sidecar.service.port": "8080",
+	})
 
-	cfg := &config.Config{
-		TraefikPort: 80,
-	}
+	cfg := &config.Config{TraefikPort: 80}
 
 	h := New(cfg, mock)
+	configs, err := h.ComputeNodeConfigs()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(configs) != 1 {
+		t.Fatalf("expected 1 node config (hub only), got %d", len(configs))
+	}
+
+	nc := configs[0]
+	if len(nc.Routes) != 2 {
+		t.Fatalf("expected 2 routes, got %d", len(nc.Routes))
+	}
+
+	routes := make(map[string]int)
+	for _, r := range nc.Routes {
+		routes[r.ServiceName] = r.Weight
+	}
+
+	if routes["web-app"] != 9 {
+		t.Errorf("expected web-app weight 9, got %d", routes["web-app"])
+	}
+	if routes["isolated"] != 9 {
+		t.Errorf("expected isolated weight 9, got %d", routes["isolated"])
+	}
+}
+
+func TestComputeNodeConfigsWithRemoteContainers(t *testing.T) {
+	os.Setenv("TRAEFIK_SIDECAR_HUB_HOST_IP", "192.168.1.10")
+	defer os.Unsetenv("TRAEFIK_SIDECAR_HUB_HOST_IP")
+
+	mock := docker.NewMockClient()
+	h := New(&config.Config{TraefikPort: 80}, mock)
+
+	// simulate remote agent reporting containers
+	remote := []docker.Container{
+		{
+			ID:   "c3",
+			Name: "remote-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`remote.local`)",
+				"traefik.sidecar.service.port": "80",
+			},
+		},
+	}
+	h.UpdateRemoteContainers("192.168.1.20", remote)
+
 	configs, err := h.ComputeNodeConfigs()
 	if err != nil {
 		t.Fatal(err)
@@ -35,145 +86,49 @@ func TestComputeNodeConfigs(t *testing.T) {
 		t.Fatalf("expected 2 node configs, got %d", len(configs))
 	}
 
-	for _, nc := range configs {
-		localRoutes := 0
-		crossRoutes := 0
-		for _, r := range nc.Routes {
-			if r.TargetNodeHost == "" {
-				localRoutes++
-			} else {
-				crossRoutes++
-			}
+	// hub node should have cross-node route to remote-app
+	hubConfig := configs[0]
+	hasCross := false
+	for _, r := range hubConfig.Routes {
+		if r.ServiceName == "remote-app" && r.Weight == 1 {
+			hasCross = true
 		}
-		if localRoutes != 1 {
-			t.Errorf("%s: expected 1 local route, got %d", nc.NodeHostname, localRoutes)
+	}
+	if !hasCross {
+		t.Errorf("hub node expected cross-node route to remote-app (weight 1)")
+	}
+
+	// remote node should have local route to remote-app
+	remoteConfig := configs[1]
+	hasLocal := false
+	for _, r := range remoteConfig.Routes {
+		if r.ServiceName == "remote-app" && r.Weight == 9 {
+			hasLocal = true
 		}
-		if crossRoutes != 1 {
-			t.Errorf("%s: expected 1 cross-node route, got %d", nc.NodeHostname, crossRoutes)
-		}
+	}
+	if !hasLocal {
+		t.Errorf("remote node expected local route to remote-app (weight 9)")
 	}
 }
 
-func TestComputeNodeConfigsCrossNode(t *testing.T) {
+func TestComputeNodeConfigsSidecarDisabled(t *testing.T) {
+	os.Setenv("TRAEFIK_SIDECAR_HUB_HOST_IP", "192.168.1.10")
+	defer os.Unsetenv("TRAEFIK_SIDECAR_HUB_HOST_IP")
+
 	mock := docker.NewMockClient()
-	mock.AddNode("node1", "linux-manager", "192.168.1.10", docker.NodeRoleManager)
-	mock.AddNode("node2", "win-worker", "192.168.1.20", docker.NodeRoleWorker)
-
-	// Service with cross-node enabled, but task only on node1
-	mock.AddService("svc1", "web-app", map[string]string{
-		"traefik.sidecar.enable":       "true",
-		"traefik.sidecar.cross-node":   "true",
-		"traefik.sidecar.router.rule":  "Host(`app.local`)",
-		"traefik.sidecar.service.port": "80",
-	})
-	mock.AddTask("t1", "svc1", "node1", docker.TaskStateRunning)
-
-	cfg := &config.Config{
-		TraefikPort: 80,
-	}
-
-	h := New(cfg, mock)
-	configs, err := h.ComputeNodeConfigs()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, nc := range configs {
-		if nc.NodeHostname == "win-worker" {
-			crossRoutes := 0
-			for _, r := range nc.Routes {
-				if r.TargetNodeHost != "" {
-					crossRoutes++
-				}
-			}
-			if crossRoutes != 1 {
-				t.Errorf("win-worker: expected 1 cross-node route to node1, got %d", crossRoutes)
-			}
-			// Verify cross-node route points to node1's host IP
-			for _, r := range nc.Routes {
-				if r.TargetNodeHost != "" && r.TargetNodeHost != "192.168.1.10" {
-					t.Errorf("expected cross-node route to 192.168.1.10, got %s", r.TargetNodeHost)
-				}
-			}
-		}
-		// linux-manager should NOT have cross-node routes since it has the task
-		if nc.NodeHostname == "linux-manager" {
-			for _, r := range nc.Routes {
-				if r.TargetNodeHost != "" {
-					t.Errorf("linux-manager: unexpected cross-node route to %s", r.TargetNodeHost)
-				}
-			}
-		}
-	}
-}
-
-func TestComputeNodeConfigsNoCrossNode(t *testing.T) {
-	mock := docker.NewMockClient()
-	mock.AddNode("node1", "linux-manager", "192.168.1.10", docker.NodeRoleManager)
-	mock.AddNode("node2", "win-worker", "192.168.1.20", docker.NodeRoleWorker)
-
-	// Service without cross-node enabled
-	mock.AddService("svc1", "isolated", map[string]string{
-		"traefik.sidecar.enable":       "true",
-		"traefik.sidecar.router.rule":  "Host(`isolated.local`)",
-		"traefik.sidecar.service.port": "8080",
-	})
-	mock.AddTask("t1", "svc1", "node1", docker.TaskStateRunning)
-
-	cfg := &config.Config{TraefikPort: 80}
-	h := New(cfg, mock)
-	configs, err := h.ComputeNodeConfigs()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, nc := range configs {
-		if nc.NodeHostname == "win-worker" {
-			if len(nc.Routes) > 0 {
-				t.Errorf("win-worker: expected no routes for service without cross-node, got %d", len(nc.Routes))
-			}
-		}
-	}
-}
-
-func TestComputeNodeConfigsServiceRemoved(t *testing.T) {
-	mock := docker.NewMockClient()
-	mock.AddNode("node1", "linux-manager", "192.168.1.10", docker.NodeRoleManager)
-
-	// Service existed but agent still has stale config
-	mock.AddService("svc1", "removed-app", map[string]string{
-		"traefik.sidecar.enable":       "true",
-		"traefik.sidecar.cross-node":   "true",
-		"traefik.sidecar.router.rule":  "Host(`gone.local`)",
-		"traefik.sidecar.service.port": "80",
+	mock.AddContainer("c1", "plain", map[string]string{
+		"traefik.enable": "true",
 	})
 
 	cfg := &config.Config{TraefikPort: 80}
 	h := New(cfg, mock)
 
-	// Compute configs - service exists, should have routes
 	configs, err := h.ComputeNodeConfigs()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs[0].Routes) == 0 {
-		t.Fatal("expected routes before service removal")
-	}
 
-	// Now remove the service
-	mock.AddService("svc1", "removed-app", map[string]string{})
-	mock.AddTask("removed-t1", "svc1", "node1", docker.TaskStateShutdown)
-
-	// Recompute - should produce DELETE actions
-	configs, err = h.ComputeNodeConfigs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, nc := range configs {
-		for _, r := range nc.Routes {
-			if r.Action != RouteDelete {
-				t.Errorf("expected DELETE action for removed service, got %v", r.Action)
-			}
-		}
+	if len(configs[0].Routes) != 0 {
+		t.Errorf("expected 0 routes for container without sidecar labels")
 	}
 }

@@ -8,18 +8,20 @@ import (
 
 	"github.com/chamoouske/traefik-sidecar/internal/api"
 	"github.com/chamoouske/traefik-sidecar/internal/config"
+	"github.com/chamoouske/traefik-sidecar/pkg/docker"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
 
 type StreamClient struct {
-	cfg   *config.Config
-	agent *Agent
+	cfg    *config.Config
+	agent  *Agent
+	docker docker.Client
 }
 
-func NewStreamClient(cfg *config.Config, agent *Agent) *StreamClient {
-	return &StreamClient{cfg: cfg, agent: agent}
+func NewStreamClient(cfg *config.Config, agent *Agent, dockerClient docker.Client) *StreamClient {
+	return &StreamClient{cfg: cfg, agent: agent, docker: dockerClient}
 }
 
 func (c *StreamClient) Run(ctx context.Context, nodeName, nodeHostIP string) error {
@@ -88,6 +90,12 @@ func (c *StreamClient) connectAndStream(ctx context.Context, nodeName, nodeHostI
 
 	log.Printf("connected to hub: %s", connectResp.GetConnectResponse().HubId)
 
+	// report local containers immediately after connecting
+	c.reportContainers(stream)
+
+	// start watching local Docker events
+	go c.watchLocalContainers(stream)
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -117,6 +125,50 @@ func (c *StreamClient) connectAndStream(ctx context.Context, nodeName, nodeHostI
 		case <-pollTicker.C:
 			c.sendRouteSync(stream)
 		default:
+		}
+	}
+}
+
+func (c *StreamClient) reportContainers(stream api.SidecarService_ConnectClient) {
+	containers, err := c.docker.ListContainers()
+	if err != nil {
+		log.Printf("list local containers: %v", err)
+		return
+	}
+
+	infos := make([]*api.ContainerInfo, 0, len(containers))
+	for _, ct := range containers {
+		infos = append(infos, &api.ContainerInfo{
+			ContainerId: ct.ID,
+			Name:        ct.Name,
+			Labels:      ct.Labels,
+		})
+	}
+
+	msg := &api.AgentToHub{
+		Payload: &api.AgentToHub_ContainerReport{
+			ContainerReport: &api.ContainerReport{
+				Containers: infos,
+			},
+		},
+	}
+
+	if err := stream.Send(msg); err != nil {
+		log.Printf("send container report: %v", err)
+	}
+}
+
+func (c *StreamClient) watchLocalContainers(stream api.SidecarService_ConnectClient) {
+	events, err := c.docker.Events()
+	if err != nil {
+		log.Printf("watch container events: %v", err)
+		return
+	}
+
+	for evt := range events {
+		switch evt.Type {
+		case docker.EventContainerStart, docker.EventContainerDie, docker.EventContainerDestroy:
+			c.reportContainers(stream)
 		}
 	}
 }

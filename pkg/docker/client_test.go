@@ -4,113 +4,61 @@ import (
 	"testing"
 )
 
-func TestMockListServices(t *testing.T) {
+func TestMockListContainers(t *testing.T) {
 	client := NewMockClient()
-	client.AddService("svc1", "web-app", map[string]string{
+	client.AddContainer("c1", "web-app", map[string]string{
 		"traefik.sidecar.enable":       "true",
 		"traefik.sidecar.cross-node":   "true",
 		"traefik.sidecar.router.rule":  "Host(`app.local`)",
 		"traefik.sidecar.service.port": "80",
 	})
-	client.AddService("svc2", "api", map[string]string{
+	client.AddContainer("c2", "api", map[string]string{
 		"traefik.sidecar.enable":       "true",
 		"traefik.sidecar.router.rule":  "Host(`api.local`)",
 		"traefik.sidecar.service.port": "8080",
 	})
 
-	services, err := client.ListServices()
+	containers, err := client.ListContainers()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(services) != 2 {
-		t.Fatalf("expected 2 services, got %d", len(services))
+	if len(containers) != 2 {
+		t.Fatalf("expected 2 containers, got %d", len(containers))
 	}
 
-	svcByName := make(map[string]Service)
-	for _, s := range services {
-		svcByName[s.Name] = s
+	cByName := make(map[string]Container)
+	for _, c := range containers {
+		cByName[c.Name] = c
 	}
 
-	svc, ok := svcByName["web-app"]
+	c, ok := cByName["web-app"]
 	if !ok {
-		t.Fatal("expected web-app service")
+		t.Fatal("expected web-app container")
 	}
-	if svc.Labels["traefik.sidecar.enable"] != "true" {
-		t.Errorf("expected enable label, got %s", svc.Labels["traefik.sidecar.enable"])
+	if c.Labels["traefik.sidecar.enable"] != "true" {
+		t.Errorf("expected enable label, got %s", c.Labels["traefik.sidecar.enable"])
 	}
 
-	_, ok = svcByName["api"]
+	_, ok = cByName["api"]
 	if !ok {
-		t.Fatal("expected api service")
+		t.Fatal("expected api container")
 	}
 }
 
-func TestMockGetServiceByID(t *testing.T) {
+func TestMockRemoveContainer(t *testing.T) {
 	client := NewMockClient()
-	client.AddService("svc1", "web-app", nil)
+	client.AddContainer("c1", "web-app", nil)
 
-	svc, err := client.GetService("svc1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if svc.Name != "web-app" {
-		t.Errorf("expected web-app, got %s", svc.Name)
+	containers, _ := client.ListContainers()
+	if len(containers) != 1 {
+		t.Fatalf("expected 1 container, got %d", len(containers))
 	}
 
-	_, err = client.GetService("nonexistent")
-	if err == nil {
-		t.Fatal("expected error for nonexistent service")
-	}
-}
-
-func TestMockListTasks(t *testing.T) {
-	client := NewMockClient()
-	client.AddService("svc1", "web-app", nil)
-	client.AddTask("task1", "svc1", "node1", TaskStateRunning)
-	client.AddTask("task2", "svc1", "node2", TaskStateRunning)
-	client.AddTask("task3", "svc1", "node3", TaskStatePending)
-
-	tasks, err := client.ListTasks("svc1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(tasks) != 3 {
-		t.Fatalf("expected 3 tasks, got %d", len(tasks))
-	}
-
-	running := 0
-	for _, t := range tasks {
-		if t.Status == TaskStateRunning {
-			running++
-		}
-	}
-	if running != 2 {
-		t.Errorf("expected 2 running tasks, got %d", running)
-	}
-}
-
-func TestMockListNodes(t *testing.T) {
-	client := NewMockClient()
-	client.AddNode("node1", "linux-manager", "192.168.1.10", NodeRoleManager)
-	client.AddNode("node2", "win-worker", "192.168.1.20", NodeRoleWorker)
-
-	nodes, err := client.ListNodes()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(nodes) != 2 {
-		t.Fatalf("expected 2 nodes, got %d", len(nodes))
-	}
-
-	n := nodes[1]
-	if n.Hostname != "win-worker" {
-		t.Errorf("expected win-worker, got %s", n.Hostname)
-	}
-	if n.HostIP != "192.168.1.20" {
-		t.Errorf("expected 192.168.1.20, got %s", n.HostIP)
+	client.RemoveContainer("c1")
+	containers, _ = client.ListContainers()
+	if len(containers) != 0 {
+		t.Errorf("expected 0 containers after removal, got %d", len(containers))
 	}
 }
 
@@ -122,15 +70,19 @@ func TestMockEvents(t *testing.T) {
 	}
 
 	client.PublishEvent(Event{
-		Type:      EventServiceCreate,
-		ServiceID: "svc1",
+		Type:        EventContainerStart,
+		ContainerID: "c1",
+		Name:        "web-app",
 	})
 
 	evt := <-events
-	if evt.Type != EventServiceCreate {
-		t.Errorf("expected EventServiceCreate, got %v", evt.Type)
+	if evt.Type != EventContainerStart {
+		t.Errorf("expected EventContainerStart, got %v", evt.Type)
 	}
-	if evt.ServiceID != "svc1" {
-		t.Errorf("expected svc1, got %s", evt.ServiceID)
+	if evt.ContainerID != "c1" {
+		t.Errorf("expected c1, got %s", evt.ContainerID)
+	}
+	if evt.Name != "web-app" {
+		t.Errorf("expected web-app, got %s", evt.Name)
 	}
 }

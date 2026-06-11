@@ -64,77 +64,24 @@ func (r *RealClient) doGet(path string) ([]byte, error) {
 	return body, nil
 }
 
-func (r *RealClient) ListServices() ([]Service, error) {
-	body, err := r.doGet("/v1.48/services")
+func (r *RealClient) ListContainers() ([]Container, error) {
+	body, err := r.doGet("/v1.48/containers/json?all=false")
 	if err != nil {
 		return nil, err
 	}
 
 	var raw []json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("parse services: %w", err)
+		return nil, fmt.Errorf("parse containers: %w", err)
 	}
 
-	result := make([]Service, 0, len(raw))
+	result := make([]Container, 0, len(raw))
 	for _, item := range raw {
-		svc, err := parseService(item)
+		c, err := parseContainer(item)
 		if err != nil {
 			continue
 		}
-		result = append(result, svc)
-	}
-	return result, nil
-}
-
-func (r *RealClient) GetService(id string) (Service, error) {
-	body, err := r.doGet("/v1.48/services/" + id)
-	if err != nil {
-		return Service{}, err
-	}
-
-	return parseService(body)
-}
-
-func (r *RealClient) ListTasks(serviceID string) ([]Task, error) {
-	body, err := r.doGet("/v1.48/tasks?filters=" + `{"service":{"` + serviceID + `":true}}`)
-	if err != nil {
-		return nil, err
-	}
-
-	var raw []json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("parse tasks: %w", err)
-	}
-
-	result := make([]Task, 0, len(raw))
-	for _, item := range raw {
-		t, err := parseTask(item)
-		if err != nil {
-			continue
-		}
-		result = append(result, t)
-	}
-	return result, nil
-}
-
-func (r *RealClient) ListNodes() ([]Node, error) {
-	body, err := r.doGet("/v1.48/nodes")
-	if err != nil {
-		return nil, err
-	}
-
-	var raw []json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("parse nodes: %w", err)
-	}
-
-	result := make([]Node, 0, len(raw))
-	for _, item := range raw {
-		n, err := parseNode(item)
-		if err != nil {
-			continue
-		}
-		result = append(result, n)
+		result = append(result, c)
 	}
 	return result, nil
 }
@@ -154,7 +101,7 @@ func (r *RealClient) watchEvents() {
 	}
 	defer conn.Close()
 
-	req := "GET /v1.48/events?type=service&type=task HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\n\r\n"
+	req := "GET /v1.48/events HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\n\r\n"
 	if _, err := conn.Write([]byte(req)); err != nil {
 		return
 	}
@@ -179,7 +126,7 @@ func (r *RealClient) watchEvents() {
 		if err := dec.Decode(&raw); err != nil {
 			return
 		}
-		evt, err := parseEvent(raw)
+		evt, err := parseContainerEvent(raw)
 		if err != nil {
 			continue
 		}
@@ -195,135 +142,87 @@ func (r *RealClient) Close() error {
 	return nil
 }
 
-type dockerService struct {
-	ID   string `json:"ID"`
-	Spec struct {
-		Name   string            `json:"Name"`
+type dockerContainer struct {
+	ID    string `json:"Id"`
+	Names []string `json:"Names"`
+	State string `json:"State"`
+	Labels map[string]string `json:"Labels"`
+}
+
+func parseContainer(data []byte) (Container, error) {
+	var dc struct {
+		ID    string            `json:"Id"`
+		Names []string          `json:"Names"`
+		State string            `json:"State"`
 		Labels map[string]string `json:"Labels"`
-	} `json:"Spec"`
-}
+	}
+	if err := json.Unmarshal(data, &dc); err != nil {
+		return Container{}, err
+	}
 
-func parseService(data []byte) (Service, error) {
-	var ds dockerService
-	if err := json.Unmarshal(data, &ds); err != nil {
-		return Service{}, err
+	name := ""
+	if len(dc.Names) > 0 {
+		name = strings.TrimPrefix(dc.Names[0], "/")
 	}
-	if ds.Spec.Labels == nil {
-		ds.Spec.Labels = make(map[string]string)
+
+	if dc.Labels == nil {
+		dc.Labels = make(map[string]string)
 	}
-	return Service{
-		ID:     ds.ID,
-		Name:   ds.Spec.Name,
-		Labels: ds.Spec.Labels,
+
+	return Container{
+		ID:     dc.ID,
+		Name:   name,
+		Labels: dc.Labels,
+		State:  dc.State,
 	}, nil
 }
 
-type dockerTask struct {
-	ID        string `json:"ID"`
-	ServiceID string `json:"ServiceID"`
-	NodeID    string `json:"NodeID"`
-	Status    struct {
-		State string `json:"State"`
-	} `json:"Status"`
-}
-
-func parseTask(data []byte) (Task, error) {
-	var dt dockerTask
-	if err := json.Unmarshal(data, &dt); err != nil {
-		return Task{}, err
-	}
-
-	status := taskStateFromString(dt.Status.State)
-	return Task{
-		ID:        dt.ID,
-		ServiceID: dt.ServiceID,
-		NodeID:    dt.NodeID,
-		Status:    status,
-	}, nil
-}
-
-func taskStateFromString(s string) TaskStatus {
-	switch s {
-	case "new":
-		return TaskStateNew
-	case "pending":
-		return TaskStatePending
-	case "running":
-		return TaskStateRunning
-	case "shutdown":
-		return TaskStateShutdown
-	case "failed":
-		return TaskStateFailed
-	default:
-		return TaskStatePending
-	}
-}
-
-type dockerNode struct {
-	ID string `json:"ID"`
-	Description struct {
-		Hostname string `json:"hostname"`
-	} `json:"Description"`
-	Status struct {
-		Addr string `json:"Addr"`
-	} `json:"Status"`
-	Spec struct {
-		Role string `json:"Role"`
-	} `json:"Spec"`
-}
-
-func parseNode(data []byte) (Node, error) {
-	var dn dockerNode
-	if err := json.Unmarshal(data, &dn); err != nil {
-		return Node{}, err
-	}
-
-	role := NodeRoleWorker
-	if dn.Spec.Role == "manager" {
-		role = NodeRoleManager
-	}
-
-	return Node{
-		ID:       dn.ID,
-		Hostname: dn.Description.Hostname,
-		HostIP:   dn.Status.Addr,
-		Role:     role,
-	}, nil
+type dockerEventActor struct {
+	ID         string            `json:"ID"`
+	Attributes map[string]string `json:"Attributes"`
 }
 
 type dockerEvent struct {
-	Type   string `json:"Type"`
-	Action string `json:"Action"`
-	Actor  struct {
-		ID string `json:"ID"`
-	} `json:"Actor"`
+	Type   string           `json:"Type"`
+	Action string           `json:"Action"`
+	Actor  dockerEventActor `json:"Actor"`
 }
 
-func parseEvent(data []byte) (Event, error) {
+var containerEventActionMap = map[string]EventType{
+	"start":   EventContainerStart,
+	"stop":    EventContainerStop,
+	"die":     EventContainerDie,
+	"destroy": EventContainerDestroy,
+}
+
+func parseContainerEvent(data []byte) (Event, error) {
 	var de dockerEvent
 	if err := json.Unmarshal(data, &de); err != nil {
 		return Event{}, err
 	}
 
-	key := de.Type + ":" + de.Action
-	et, ok := eventTypeMap[key]
-	if !ok {
-		return Event{}, fmt.Errorf("unknown event: %s", key)
+	if de.Type != "container" {
+		return Event{}, fmt.Errorf("not a container event: %s", de.Type)
 	}
 
-	return Event{
-		Type:      et,
-		ServiceID: de.Actor.ID,
-		NodeID:    de.Actor.ID,
-	}, nil
-}
+	et, ok := containerEventActionMap[de.Action]
+	if !ok {
+		return Event{}, fmt.Errorf("unknown container event action: %s", de.Action)
+	}
 
-var eventTypeMap = map[string]EventType{
-	"service:create": EventServiceCreate,
-	"service:update": EventServiceUpdate,
-	"service:remove": EventServiceRemove,
-	"task:create":    EventTaskCreate,
-	"task:running":   EventTaskRunning,
-	"task:shutdown":  EventTaskShutdown,
-	"task:failed":    EventTaskFailed,
+	labels := make(map[string]string)
+	for k, v := range de.Actor.Attributes {
+		if strings.HasPrefix(k, "label.") {
+			labels[strings.TrimPrefix(k, "label.")] = v
+		}
+	}
+
+	name := de.Actor.Attributes["name"]
+
+	return Event{
+		Type:        et,
+		ContainerID: de.Actor.ID,
+		Name:        name,
+		Labels:      labels,
+	}, nil
 }

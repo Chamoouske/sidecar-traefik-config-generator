@@ -88,6 +88,9 @@ services:
       - type: volume
         source: traefik_shared
         target: /etc/traefik-sidecar
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
     networks:
       - traefik
     environment:
@@ -99,6 +102,8 @@ services:
       TRAEFIK_SIDECAR_AGENT_PORT: 9090
       TRAEFIK_SIDECAR_TRAEFIK_PORT: 80
       TRAEFIK_SIDECAR_LOG_LEVEL: info
+      TRAEFIK_SIDECAR_DOCKER_HOST: unix:///var/run/docker.sock
+      TRAEFIK_SIDECAR_NODE_HOST_IP: ""
     ports:
       - target: 9090
         published: 9090

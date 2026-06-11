@@ -9,6 +9,7 @@ import (
 
 	"github.com/chamoouske/traefik-sidecar/internal/agent"
 	"github.com/chamoouske/traefik-sidecar/internal/config"
+	"github.com/chamoouske/traefik-sidecar/pkg/docker"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -50,11 +51,22 @@ func main() {
 		}
 	}()
 
+	dockerHost := os.Getenv("TRAEFIK_SIDECAR_DOCKER_HOST")
+	if dockerHost == "" {
+		dockerHost = "unix:///var/run/docker.sock"
+	}
+
+	dockerClient, err := docker.NewClient(dockerHost)
+	if err != nil {
+		log.Fatalf("docker client: %v", err)
+	}
+	defer dockerClient.Close()
+
 	a := agent.New(&agent.Config{
 		ConfigDir: cfg.ConfigDir,
 	})
 
-	client := agent.NewStreamClient(cfg, a)
+	client := agent.NewStreamClient(cfg, a, dockerClient)
 	ctx := context.Background()
 
 	log.Printf("agent %s starting on %s, connecting to hub at %s", hostname, nodeHostIP, cfg.HubAddr)
@@ -96,4 +108,3 @@ func detectHostIP() string {
 
 	return ""
 }
-
