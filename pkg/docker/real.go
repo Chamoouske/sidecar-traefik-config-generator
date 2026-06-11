@@ -89,7 +89,7 @@ func (r *RealClient) doGet(path string) ([]byte, error) {
 }
 
 func (r *RealClient) ListContainers() ([]Container, error) {
-	body, err := r.doGet("/" + r.apiVersion + "/containers/json?all=false")
+	body, err := r.doGet("/v" + r.apiVersion + "/containers/json?all=false")
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func (r *RealClient) watchEvents() {
 	}
 	defer conn.Close()
 
-	req := "GET /" + r.apiVersion + "/events HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\n\r\n"
+	req := "GET /v" + r.apiVersion + "/events HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\n\r\n"
 	if _, err := conn.Write([]byte(req)); err != nil {
 		return
 	}
