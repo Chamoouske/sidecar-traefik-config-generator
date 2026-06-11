@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -158,17 +159,20 @@ func (r *RealClient) watchEvents() {
 		return
 	}
 
-	dec := json.NewDecoder(conn)
+	br := bufio.NewReader(conn)
 	// consume HTTP header
 	for {
-		var line string
-		if _, err := fmt.Fscanf(conn, "%s\r\n", &line); err != nil {
+		line, err := br.ReadString('\n')
+		if err != nil {
 			return
 		}
+		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
 			break
 		}
 	}
+
+	dec := json.NewDecoder(br)
 
 	for {
 		var raw json.RawMessage

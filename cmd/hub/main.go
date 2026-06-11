@@ -3,14 +3,17 @@ package main
 import (
 	"log"
 	"net"
+	"time"
 
+	"github.com/chamoouske/traefik-sidecar/internal/api"
 	"github.com/chamoouske/traefik-sidecar/internal/config"
 	"github.com/chamoouske/traefik-sidecar/internal/hub"
 	"github.com/chamoouske/traefik-sidecar/pkg/docker"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
-
-	"github.com/chamoouske/traefik-sidecar/internal/api"
 )
 
 func main() {
@@ -28,9 +31,22 @@ func main() {
 	h := hub.New(cfg, dockerClient)
 	svc := hub.NewServiceServer(h)
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    10 * time.Second,
+			Timeout: 5 * time.Second,
+		}),
+	)
 	api.RegisterSidecarServiceServer(grpcServer, svc)
 	reflection.Register(grpcServer)
+
+	healthServer := health.NewServer()
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
+	healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
 	lis, err := net.Listen("tcp", cfg.HubAddr)
 	if err != nil {

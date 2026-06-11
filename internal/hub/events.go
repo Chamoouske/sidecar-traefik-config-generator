@@ -32,7 +32,7 @@ func (h *Hub) dispatchConfigs(svc *ServiceServer) {
 	}
 
 	for _, nc := range configs {
-		stream := svc.GetAgentStream(nc.NodeID)
+		stream := svc.GetAgentStream(nc.NodeIP)
 		if stream == nil {
 			continue
 		}
@@ -58,7 +58,7 @@ func (h *Hub) dispatchConfigs(svc *ServiceServer) {
 				msg.GetRouteCommand().TargetNodeHostIps = []string{route.TargetNodeHost}
 			}
 
-			svc.SendToAgent(nc.NodeID, msg)
+			svc.SendToAgent(nc.NodeIP, msg)
 		}
 	}
 }

@@ -11,17 +11,17 @@ import (
 )
 
 type AgentStream struct {
-	NodeName    string
-	NodeHostIP  string
-	Send        chan *api.HubToAgent
-	Connected   bool
+	NodeName   string
+	NodeHostIP string
+	Send       chan *api.HubToAgent
+	Connected  bool
 }
 
 type ServiceServer struct {
 	api.UnimplementedSidecarServiceServer
-	hub      *Hub
-	mu       sync.RWMutex
-	agents   map[string]*AgentStream
+	hub    *Hub
+	mu     sync.RWMutex
+	agents map[string]*AgentStream
 }
 
 func NewServiceServer(h *Hub) *ServiceServer {
@@ -31,18 +31,18 @@ func NewServiceServer(h *Hub) *ServiceServer {
 	}
 }
 
-func (s *ServiceServer) GetAgentStream(nodeName string) *AgentStream {
+func (s *ServiceServer) GetAgentStream(nodeIP string) *AgentStream {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.agents[nodeName]
+	return s.agents[nodeIP]
 }
 
 func (s *ServiceServer) GetConnectedAgents() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var result []string
-	for name := range s.agents {
-		result = append(result, name)
+	for _, a := range s.agents {
+		result = append(result, a.NodeName)
 	}
 	return result
 }
@@ -61,6 +61,10 @@ func (s *ServiceServer) Connect(stream api.SidecarService_ConnectServer) error {
 	nodeName := connectReq.NodeName
 	nodeHostIP := connectReq.NodeHostIp
 
+	if nodeHostIP == "" {
+		return status.Errorf(codes.InvalidArgument, "NodeHostIp is required for agent registration")
+	}
+
 	agentStream := &AgentStream{
 		NodeName:   nodeName,
 		NodeHostIP: nodeHostIP,
@@ -69,7 +73,7 @@ func (s *ServiceServer) Connect(stream api.SidecarService_ConnectServer) error {
 	}
 
 	s.mu.Lock()
-	s.agents[nodeName] = agentStream
+	s.agents[nodeHostIP] = agentStream
 	s.mu.Unlock()
 
 	log.Printf("agent connected: %s (%s)", nodeName, nodeHostIP)
@@ -83,7 +87,7 @@ func (s *ServiceServer) Connect(stream api.SidecarService_ConnectServer) error {
 		},
 	})
 	if err != nil {
-		s.disconnect(nodeName, err)
+		s.disconnect(nodeHostIP, err)
 		return err
 	}
 
@@ -104,7 +108,7 @@ func (s *ServiceServer) Connect(stream api.SidecarService_ConnectServer) error {
 				errChan <- err
 				return
 			}
-			s.handleAgentMessage(nodeName, msg)
+			s.handleAgentMessage(agentStream, msg)
 		}
 	}()
 
@@ -121,26 +125,21 @@ func (s *ServiceServer) Connect(stream api.SidecarService_ConnectServer) error {
 	err = <-errChan
 	close(agentStream.Send)
 
-	s.disconnect(nodeName, err)
+	s.disconnect(nodeHostIP, err)
 	return err
 }
 
-func (s *ServiceServer) handleAgentMessage(nodeName string, msg *api.AgentToHub) {
+func (s *ServiceServer) handleAgentMessage(stream *AgentStream, msg *api.AgentToHub) {
 	switch p := msg.Payload.(type) {
 	case *api.AgentToHub_Ack:
-		log.Printf("ack from %s: service=%s success=%v", nodeName, p.Ack.ServiceName, p.Ack.Success)
+		log.Printf("ack from %s: service=%s success=%v", stream.NodeName, p.Ack.ServiceName, p.Ack.Success)
 	case *api.AgentToHub_RouteSync:
-		log.Printf("route sync from %s: %d active services", nodeName, len(p.RouteSync.ActiveServiceNames))
-		s.handleRouteSync(nodeName, p.RouteSync)
+		log.Printf("route sync from %s: %d active services", stream.NodeName, len(p.RouteSync.ActiveServiceNames))
+		s.handleRouteSync(stream, p.RouteSync)
 	}
 }
 
-func (s *ServiceServer) handleRouteSync(nodeName string, req *api.RouteSyncRequest) {
-	stream := s.GetAgentStream(nodeName)
-	if stream == nil {
-		return
-	}
-
+func (s *ServiceServer) handleRouteSync(stream *AgentStream, req *api.RouteSyncRequest) {
 	cfg, err := s.hub.ComputeNodeConfigs()
 	if err != nil {
 		log.Printf("compute configs for route sync: %v", err)
@@ -149,7 +148,7 @@ func (s *ServiceServer) handleRouteSync(nodeName string, req *api.RouteSyncReque
 
 	var authoritative []string
 	for _, nc := range cfg {
-		if nc.NodeID == nodeName {
+		if nc.NodeIP == stream.NodeHostIP {
 			for _, r := range nc.Routes {
 				authoritative = append(authoritative, r.ServiceName)
 			}
@@ -165,21 +164,21 @@ func (s *ServiceServer) handleRouteSync(nodeName string, req *api.RouteSyncReque
 	}
 }
 
-func (s *ServiceServer) disconnect(nodeName string, err error) {
+func (s *ServiceServer) disconnect(nodeIP string, err error) {
 	s.mu.Lock()
-	delete(s.agents, nodeName)
+	delete(s.agents, nodeIP)
 	s.mu.Unlock()
 
 	if err != nil && err != io.EOF {
-		log.Printf("agent %s disconnected with error: %v", nodeName, err)
+		log.Printf("agent %s disconnected with error: %v", nodeIP, err)
 	} else {
-		log.Printf("agent %s disconnected", nodeName)
+		log.Printf("agent %s disconnected", nodeIP)
 	}
 }
 
-func (s *ServiceServer) SendToAgent(nodeName string, msg *api.HubToAgent) {
+func (s *ServiceServer) SendToAgent(nodeIP string, msg *api.HubToAgent) {
 	s.mu.RLock()
-	stream, ok := s.agents[nodeName]
+	stream, ok := s.agents[nodeIP]
 	s.mu.RUnlock()
 
 	if !ok {
@@ -189,6 +188,6 @@ func (s *ServiceServer) SendToAgent(nodeName string, msg *api.HubToAgent) {
 	select {
 	case stream.Send <- msg:
 	default:
-		log.Printf("dropping message for agent %s: channel full", nodeName)
+		log.Printf("dropping message for agent %s: channel full", nodeIP)
 	}
 }

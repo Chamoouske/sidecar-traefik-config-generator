@@ -46,10 +46,10 @@ func TestComputeNodeConfigs(t *testing.T) {
 			}
 		}
 		if localRoutes != 1 {
-			t.Errorf("%s: expected 1 local route, got %d", nc.NodeID, localRoutes)
+			t.Errorf("%s: expected 1 local route, got %d", nc.NodeHostname, localRoutes)
 		}
 		if crossRoutes != 1 {
-			t.Errorf("%s: expected 1 cross-node route, got %d", nc.NodeID, crossRoutes)
+			t.Errorf("%s: expected 1 cross-node route, got %d", nc.NodeHostname, crossRoutes)
 		}
 	}
 }
@@ -79,7 +79,7 @@ func TestComputeNodeConfigsCrossNode(t *testing.T) {
 	}
 
 	for _, nc := range configs {
-		if nc.NodeID == "node2" {
+		if nc.NodeHostname == "win-worker" {
 			crossRoutes := 0
 			for _, r := range nc.Routes {
 				if r.TargetNodeHost != "" {
@@ -87,7 +87,7 @@ func TestComputeNodeConfigsCrossNode(t *testing.T) {
 				}
 			}
 			if crossRoutes != 1 {
-				t.Errorf("node2: expected 1 cross-node route to node1, got %d", crossRoutes)
+				t.Errorf("win-worker: expected 1 cross-node route to node1, got %d", crossRoutes)
 			}
 			// Verify cross-node route points to node1's host IP
 			for _, r := range nc.Routes {
@@ -96,11 +96,11 @@ func TestComputeNodeConfigsCrossNode(t *testing.T) {
 				}
 			}
 		}
-		// node1 should NOT have cross-node routes since it has the task
-		if nc.NodeID == "node1" {
+		// linux-manager should NOT have cross-node routes since it has the task
+		if nc.NodeHostname == "linux-manager" {
 			for _, r := range nc.Routes {
 				if r.TargetNodeHost != "" {
-					t.Errorf("node1: unexpected cross-node route to %s", r.TargetNodeHost)
+					t.Errorf("linux-manager: unexpected cross-node route to %s", r.TargetNodeHost)
 				}
 			}
 		}
@@ -128,9 +128,9 @@ func TestComputeNodeConfigsNoCrossNode(t *testing.T) {
 	}
 
 	for _, nc := range configs {
-		if nc.NodeID == "node2" {
+		if nc.NodeHostname == "win-worker" {
 			if len(nc.Routes) > 0 {
-				t.Errorf("node2: expected no routes for service without cross-node, got %d", len(nc.Routes))
+				t.Errorf("win-worker: expected no routes for service without cross-node, got %d", len(nc.Routes))
 			}
 		}
 	}

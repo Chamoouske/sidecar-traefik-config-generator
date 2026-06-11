@@ -10,6 +10,7 @@ import (
 	"github.com/chamoouske/traefik-sidecar/internal/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
 type StreamClient struct {
@@ -46,6 +47,11 @@ func (c *StreamClient) connectAndStream(ctx context.Context, nodeName, nodeHostI
 	conn, err := grpc.DialContext(ctx, c.cfg.HubAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second,
+			Timeout:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
 	)
 	if err != nil {
 		return err

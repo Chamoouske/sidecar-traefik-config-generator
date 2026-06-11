@@ -24,9 +24,10 @@ type Route struct {
 }
 
 type NodeConfig struct {
-	NodeID string
-	NodeIP string
-	Routes []Route
+	NodeID       string
+	NodeHostname string
+	NodeIP       string
+	Routes       []Route
 }
 
 type Hub struct {
@@ -95,8 +96,9 @@ func (h *Hub) ComputeNodeConfigs() ([]NodeConfig, error) {
 
 	for _, node := range nodes {
 		nc := NodeConfig{
-			NodeID: node.ID,
-			NodeIP: node.HostIP,
+			NodeID:       node.ID,
+			NodeHostname: node.Hostname,
+			NodeIP:       node.HostIP,
 		}
 
 		for _, st := range activeServices {
