@@ -88,6 +88,24 @@ services:
       - "traefik.sidecar.router.entrypoints=websecure"
       - "traefik.sidecar.service.port=80"
 
+  # ─── Middleware example: WebSocket headers ──────────────────
+  # Define a middleware via labels and reference it in the router.
+  # Produces _middlewares.yml (global) + hermes.yml (service).
+  # ───────────────────────────────────────────────────────────
+  hermes:
+    image: traefik/whoami
+    container_name: hermes
+    hostname: hermes
+    network_mode: host
+    labels:
+      - "traefik.sidecar.enable=true"
+      - "traefik.sidecar.router.rule=Host(`hermes.local`)"
+      - "traefik.sidecar.router.entrypoints=websecure"
+      - "traefik.sidecar.router.middlewares=hermes-ws-headers"
+      - "traefik.sidecar.service.port=80"
+      - "traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Upgrade=websocket"
+      - "traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Connection=Upgrade"
+
   # ─── Docker Desktop (Windows/Mac) ──────────────────────────
   # Uncomment and adjust this profile instead of "agent" above.
   # Requires bridge mode + explicit port mapping + peer IPs.

@@ -47,5 +47,8 @@ Persistent connection between two Agents, used for real-time exchange of `Contai
 ### ContainerReport
 A protobuf message containing all containers running on a node, including their `traefik.sidecar.*` labels, exposed ports, and network settings. Sent by an Agent to all its peers whenever a local container starts, stops, or changes.
 
+### Middleware
+A Traefik middleware definition, configured via `traefik.sidecar.middleware.<name>.<type>.<option>` labels on a container. Middlewares are collected across all containers and written to a global `_middlewares.yml` file. Routers reference them via `traefik.sidecar.router.middlewares`.
+
 ### NodeConfig
 The complete set of Traefik routers, services, and middlewares for a single node, computed by each Agent from its combined local + peer container information.

@@ -17,12 +17,14 @@ type traefikConfig struct {
 type httpConfig struct {
 	Routers          map[string]routerConfig          `yaml:"routers,omitempty"`
 	Services         map[string]serviceConfig         `yaml:"services,omitempty"`
+	Middlewares      map[string]map[string]any        `yaml:"middlewares,omitempty"`
 	ServersTransports map[string]serversTransportConfig `yaml:"serversTransports,omitempty"`
 }
 
 type routerConfig struct {
 	Rule        string   `yaml:"rule"`
 	EntryPoints []string `yaml:"entrypoints,omitempty"`
+	Middlewares []string `yaml:"middlewares,omitempty"`
 	Service     string   `yaml:"service"`
 	TLS         any      `yaml:"tls,omitempty"`
 }
@@ -73,9 +75,21 @@ func buildRouterConfig(c docker.Container) routerConfig {
 		}
 	}
 
+	middlewares := c.Labels["traefik.sidecar.router.middlewares"]
+	var mws []string
+	if middlewares != "" {
+		for _, m := range strings.Split(middlewares, ",") {
+			m = strings.TrimSpace(m)
+			if m != "" {
+				mws = append(mws, m)
+			}
+		}
+	}
+
 	rc := routerConfig{
 		Rule:        rule,
 		EntryPoints: entries,
+		Middlewares: mws,
 	}
 
 	tls := c.Labels["traefik.sidecar.router.tls"]
@@ -100,6 +114,48 @@ func buildLocalURL(c docker.Container) string {
 
 func buildRemoteURL(peerIP string) string {
 	return fmt.Sprintf("https://%s", peerIP)
+}
+
+func setNested(m map[string]any, keys []string, value string) {
+	for i, key := range keys {
+		if i == len(keys)-1 {
+			m[key] = value
+		} else {
+			next, ok := m[key].(map[string]any)
+			if !ok {
+				next = make(map[string]any)
+				m[key] = next
+			}
+			m = next
+		}
+	}
+}
+
+func addMiddleware(middlewares map[string]map[string]any, key, value string) {
+	rest := key[len("traefik.sidecar.middleware."):]
+	parts := strings.Split(rest, ".")
+
+	if len(parts) < 2 {
+		return
+	}
+
+	name := parts[0]
+	mtype := parts[1]
+
+	if _, ok := middlewares[name]; !ok {
+		middlewares[name] = make(map[string]any)
+	}
+
+	if len(parts) == 2 {
+		middlewares[name][mtype] = value
+	} else {
+		existing, ok := middlewares[name][mtype].(map[string]any)
+		if !ok {
+			existing = make(map[string]any)
+			middlewares[name][mtype] = existing
+		}
+		setNested(existing, parts[2:], value)
+	}
 }
 
 func isSidecarEnabled(c docker.Container) bool {
@@ -128,6 +184,7 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 	}
 
 	services := make(map[string]*entry)
+	allMiddlewares := make(map[string]map[string]any)
 
 	for _, c := range localContainers {
 		if !isSidecarEnabled(c) {
@@ -145,6 +202,12 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 			URL:    buildLocalURL(c),
 			Weight: 9,
 		})
+
+		for k, v := range c.Labels {
+			if strings.HasPrefix(k, "traefik.sidecar.middleware.") {
+				addMiddleware(allMiddlewares, k, v)
+			}
+		}
 	}
 
 	for peerIP, containers := range remotes {
@@ -164,10 +227,20 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 				URL:    buildRemoteURL(peerIP),
 				Weight: 1,
 			})
+
+			for k, v := range c.Labels {
+				if strings.HasPrefix(k, "traefik.sidecar.middleware.") {
+					addMiddleware(allMiddlewares, k, v)
+				}
+			}
 		}
 	}
 
 	log.Printf("ComputeMyConfig: %d local containers, %d remote peers", len(localContainers), len(remotes))
+
+	if len(allMiddlewares) > 0 {
+		log.Printf("ComputeMyConfig: %d middleware definitions found", len(allMiddlewares))
+	}
 
 	result := make(map[string]string, len(services))
 
@@ -234,6 +307,18 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 			continue
 		}
 		result[name] = string(out)
+	}
+
+	if len(allMiddlewares) > 0 {
+		mwCfg := traefikConfig{
+			HTTP: httpConfig{
+				Middlewares: allMiddlewares,
+			},
+		}
+		out, err := yaml.Marshal(mwCfg)
+		if err == nil {
+			result["_middlewares"] = string(out)
+		}
 	}
 
 	return result

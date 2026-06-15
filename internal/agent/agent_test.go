@@ -239,8 +239,9 @@ func assertValidTraefikYAML(t *testing.T, yamlStr, serviceName string) {
 	t.Helper()
 	var cfg struct {
 		HTTP struct {
-			Routers  map[string]any `yaml:"routers"`
-			Services map[string]any `yaml:"services"`
+			Routers     map[string]any `yaml:"routers"`
+			Services    map[string]any `yaml:"services"`
+			Middlewares map[string]any `yaml:"middlewares"`
 		} `yaml:"http"`
 	}
 	if err := yaml.Unmarshal([]byte(yamlStr), &cfg); err != nil {
@@ -251,6 +252,117 @@ func assertValidTraefikYAML(t *testing.T, yamlStr, serviceName string) {
 	}
 	if cfg.HTTP.Services == nil || cfg.HTTP.Services[serviceName] == nil {
 		t.Errorf("YAML missing service for %s", serviceName)
+	}
+}
+
+func assertMiddlewareYAML(t *testing.T, yamlStr, mwName string) {
+	t.Helper()
+	var cfg struct {
+		HTTP struct {
+			Middlewares map[string]any `yaml:"middlewares"`
+		} `yaml:"http"`
+	}
+	if err := yaml.Unmarshal([]byte(yamlStr), &cfg); err != nil {
+		t.Fatalf("invalid YAML: %v\n%s", err, yamlStr)
+	}
+	if cfg.HTTP.Middlewares == nil || cfg.HTTP.Middlewares[mwName] == nil {
+		t.Errorf("YAML missing middleware %s", mwName)
+	}
+}
+
+func TestComputeMyConfigWithMiddlewareDefinitions(t *testing.T) {
+	a := testAgent(t)
+
+	a.SetLocalContainers([]docker.Container{
+		{
+			ID:   "c1",
+			Name: "web-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.router.rule":  "Host(`app.local`)",
+				"traefik.sidecar.service.port": "80",
+			},
+		},
+		{
+			ID:   "c2",
+			Name: "mw-provider",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":                                                   "true",
+				"traefik.sidecar.router.rule":                                              "Host(`mw.local`)",
+				"traefik.sidecar.service.port":                                             "80",
+				"traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Upgrade":    "websocket",
+				"traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Connection": "Upgrade",
+			},
+		},
+	})
+
+	configs := a.ComputeMyConfig()
+
+	mwYAML, ok := configs["_middlewares"]
+	if !ok {
+		t.Fatal("expected _middlewares config to be generated")
+	}
+	assertMiddlewareYAML(t, mwYAML, "hermes-ws-headers")
+	assertContains(t, mwYAML, "Upgrade: websocket")
+	assertContains(t, mwYAML, "Connection: Upgrade")
+}
+
+func TestComputeMyConfigWithRouterMiddlewares(t *testing.T) {
+	a := testAgent(t)
+
+	a.SetLocalContainers([]docker.Container{
+		{
+			ID:   "c1",
+			Name: "web-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":                        "true",
+				"traefik.sidecar.router.rule":                   "Host(`app.local`)",
+				"traefik.sidecar.router.middlewares":             "hermes-ws-headers, auth",
+				"traefik.sidecar.service.port":                  "80",
+				"traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Upgrade": "websocket",
+				"traefik.sidecar.middleware.auth.basicAuth.users": "admin:$2y$10$hash",
+			},
+		},
+	})
+
+	configs := a.ComputeMyConfig()
+
+	svcYAML, ok := configs["web-app"]
+	if !ok {
+		t.Fatal("expected config for web-app")
+	}
+	assertValidTraefikYAML(t, svcYAML, "web-app")
+	assertContains(t, svcYAML, "middlewares:")
+	assertContains(t, svcYAML, "hermes-ws-headers")
+	assertContains(t, svcYAML, "auth")
+
+	mwYAML, ok := configs["_middlewares"]
+	if !ok {
+		t.Fatal("expected _middlewares config")
+	}
+	assertMiddlewareYAML(t, mwYAML, "hermes-ws-headers")
+	assertMiddlewareYAML(t, mwYAML, "auth")
+}
+
+func TestComputeMyConfigNoMiddlewares(t *testing.T) {
+	a := testAgent(t)
+
+	a.SetLocalContainers([]docker.Container{
+		{
+			ID:   "c1",
+			Name: "web-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.router.rule":  "Host(`app.local`)",
+				"traefik.sidecar.service.port": "80",
+			},
+		},
+	})
+
+	configs := a.ComputeMyConfig()
+
+	if _, ok := configs["_middlewares"]; ok {
+		t.Error("expected no _middlewares config when no middleware labels exist")
 	}
 }
 
