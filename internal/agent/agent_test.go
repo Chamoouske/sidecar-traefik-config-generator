@@ -180,10 +180,12 @@ func TestComputeMyConfigWithRemote(t *testing.T) {
 	yamlStr := configs["web-app"]
 	assertValidTraefikYAML(t, yamlStr, "web-app")
 	assertContains(t, yamlStr, "web-app:80")
-	assertContains(t, yamlStr, "192.168.1.20")
+	assertContains(t, yamlStr, "https://192.168.1.20")
 	assertContains(t, yamlStr, "weighted")
 	assertContains(t, yamlStr, "weight: 9")
 	assertContains(t, yamlStr, "weight: 1")
+	assertContains(t, yamlStr, "sidecar-internal")
+	assertContains(t, yamlStr, "insecureSkipVerify: true")
 }
 
 func TestComputeMyConfigRemoteOnly(t *testing.T) {
@@ -209,7 +211,9 @@ func TestComputeMyConfigRemoteOnly(t *testing.T) {
 
 	yamlStr := configs["remote-app"]
 	assertValidTraefikYAML(t, yamlStr, "remote-app")
-	assertContains(t, yamlStr, "192.168.1.20")
+	assertContains(t, yamlStr, "https://192.168.1.20")
+	assertContains(t, yamlStr, "sidecar-internal")
+	assertContains(t, yamlStr, "insecureSkipVerify: true")
 }
 
 func TestComputeMyConfigSidecarDisabled(t *testing.T) {
