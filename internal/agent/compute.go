@@ -314,12 +314,12 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 			if needed["sidecar-internal"] {
 				transports["sidecar-internal"] = serversTransportConfig{
 					InsecureSkipVerify: true,
-					ForwardHTTPVersion: true,
 				}
 			}
 			if needed["sidecar-internal-h2"] {
 				transports["sidecar-internal-h2"] = serversTransportConfig{
 					InsecureSkipVerify: true,
+					ForwardHTTPVersion: true,
 				}
 			}
 			cfg.HTTP.ServersTransports = transports

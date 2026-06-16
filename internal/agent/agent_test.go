@@ -186,7 +186,6 @@ func TestComputeMyConfigWithRemote(t *testing.T) {
 	assertContains(t, yamlStr, "weight: 1")
 	assertContains(t, yamlStr, "sidecar-internal")
 	assertContains(t, yamlStr, "insecureSkipVerify: true")
-	assertContains(t, yamlStr, "forwardHTTPVersion: true")
 }
 
 func TestComputeMyConfigRemoteOnly(t *testing.T) {
@@ -215,7 +214,6 @@ func TestComputeMyConfigRemoteOnly(t *testing.T) {
 	assertContains(t, yamlStr, "https://192.168.1.20")
 	assertContains(t, yamlStr, "sidecar-internal")
 	assertContains(t, yamlStr, "insecureSkipVerify: true")
-	assertContains(t, yamlStr, "forwardHTTPVersion: true")
 }
 
 func TestComputeMyConfigSidecarDisabled(t *testing.T) {
@@ -354,10 +352,10 @@ func TestComputeMyConfigRemoteHttp2Enabled(t *testing.T) {
 			ID:   "c1",
 			Name: "grpc-app",
 			Labels: map[string]string{
-				"traefik.sidecar.enable":       "true",
-				"traefik.sidecar.cross-node":   "true",
-				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
-				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.enable":        "true",
+				"traefik.sidecar.cross-node":    "true",
+				"traefik.sidecar.router.rule":   "Host(`grpc.local`)",
+				"traefik.sidecar.service.port":  "50051",
 				"traefik.sidecar.service.http2": "true",
 			},
 		},
@@ -368,10 +366,10 @@ func TestComputeMyConfigRemoteHttp2Enabled(t *testing.T) {
 			ID:   "c2",
 			Name: "grpc-app",
 			Labels: map[string]string{
-				"traefik.sidecar.enable":       "true",
-				"traefik.sidecar.cross-node":   "true",
-				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
-				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.enable":        "true",
+				"traefik.sidecar.cross-node":    "true",
+				"traefik.sidecar.router.rule":   "Host(`grpc.local`)",
+				"traefik.sidecar.service.port":  "50051",
 				"traefik.sidecar.service.http2": "true",
 			},
 		},
@@ -386,9 +384,7 @@ func TestComputeMyConfigRemoteHttp2Enabled(t *testing.T) {
 	assertValidTraefikYAML(t, yamlStr, "grpc-app")
 	assertContains(t, yamlStr, "sidecar-internal-h2")
 	assertContains(t, yamlStr, "insecureSkipVerify: true")
-	if strings.Contains(yamlStr, "forwardHTTPVersion: true") {
-		t.Error("expected no forwardHTTPVersion for HTTP/2 service")
-	}
+	assertContains(t, yamlStr, "forwardHTTPVersion: true")
 }
 
 func TestComputeMyConfigMixedHttpVersions(t *testing.T) {
@@ -409,10 +405,10 @@ func TestComputeMyConfigMixedHttpVersions(t *testing.T) {
 			ID:   "c2",
 			Name: "grpc-app",
 			Labels: map[string]string{
-				"traefik.sidecar.enable":       "true",
-				"traefik.sidecar.cross-node":   "true",
-				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
-				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.enable":        "true",
+				"traefik.sidecar.cross-node":    "true",
+				"traefik.sidecar.router.rule":   "Host(`grpc.local`)",
+				"traefik.sidecar.service.port":  "50051",
 				"traefik.sidecar.service.http2": "true",
 			},
 		},
@@ -433,10 +429,10 @@ func TestComputeMyConfigMixedHttpVersions(t *testing.T) {
 			ID:   "c4",
 			Name: "grpc-app",
 			Labels: map[string]string{
-				"traefik.sidecar.enable":       "true",
-				"traefik.sidecar.cross-node":   "true",
-				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
-				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.enable":        "true",
+				"traefik.sidecar.cross-node":    "true",
+				"traefik.sidecar.router.rule":   "Host(`grpc.local`)",
+				"traefik.sidecar.service.port":  "50051",
 				"traefik.sidecar.service.http2": "true",
 			},
 		},
@@ -449,7 +445,10 @@ func TestComputeMyConfigMixedHttpVersions(t *testing.T) {
 		t.Fatal("expected config for web-app")
 	}
 	assertContains(t, webYAML, "sidecar-internal")
-	assertContains(t, webYAML, "forwardHTTPVersion: true")
+	assertContains(t, webYAML, "insecureSkipVerify: true")
+	if strings.Contains(webYAML, "forwardHTTPVersion") {
+		t.Error("expected no forwardHTTPVersion for default transport")
+	}
 
 	grpcYAML, ok := configs["grpc-app"]
 	if !ok {
@@ -457,9 +456,7 @@ func TestComputeMyConfigMixedHttpVersions(t *testing.T) {
 	}
 	assertContains(t, grpcYAML, "sidecar-internal-h2")
 	assertContains(t, grpcYAML, "insecureSkipVerify: true")
-	if strings.Contains(grpcYAML, "forwardHTTPVersion: true") {
-		t.Error("expected no forwardHTTPVersion for HTTP/2 service")
-	}
+	assertContains(t, grpcYAML, "forwardHTTPVersion: true")
 }
 
 func TestComputeMyConfigNoMiddlewares(t *testing.T) {

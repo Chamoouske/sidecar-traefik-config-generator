@@ -77,7 +77,7 @@ services:
       start_period: 10s
 
   # ─── Web service (HTTP/1.1 — default) ─────────────────────
-  # Cross-node transport forces HTTP/1.1 (forwardHTTPVersion: true)
+  # Cross-node transport uses HTTP/1.1 (no forwardHTTPVersion),
   # so WebSocket upgrades work through the mesh.
   # ──────────────────────────────────────────────────────────
   web-app:
@@ -94,8 +94,8 @@ services:
 
   # ─── gRPC service (HTTP/2 opt-in) ─────────────────────────
   # Sets traefik.sidecar.service.http2=true to select the
-  # sidecar-internal-h2 transport, which omits forwardHTTPVersion
-  # and lets HTTP/2 ALPN negotiation proceed naturally.
+  # sidecar-internal-h2 transport with forwardHTTPVersion: true,
+  # preserving the client's HTTP/2 connection end-to-end.
   # ──────────────────────────────────────────────────────────
   grpc-app:
     image: my-grpc-server

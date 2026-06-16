@@ -199,7 +199,7 @@ Containers use only `traefik.sidecar.*` labels. Standard Traefik labels (`traefi
 | `traefik.sidecar.router.middlewares` | No | Comma-separated middleware references |
 | `traefik.sidecar.service.port` | Yes | Container port to route traffic to |
 | `traefik.sidecar.service.scheme` | No | Protocol scheme (default: `http`) |
-| `traefik.sidecar.service.http2` | No | `true` to use HTTP/2 for cross-node transport (gRPC). Default (unset) forces HTTP/1.1, required for WebSocket. |
+| `traefik.sidecar.service.http2` | No | `true` to enable `forwardHTTPVersion` on cross-node transport (needed for gRPC). Default (unset) uses HTTP/1.1, required for WebSocket. |
 | `traefik.sidecar.middleware.<name>.<type>` | No | Inline middleware definition |
 
 Each Agent reads these labels from the local Docker API and translates them into the corresponding Traefik dynamic configuration YAML.

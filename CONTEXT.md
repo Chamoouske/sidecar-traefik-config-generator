@@ -48,7 +48,7 @@ Persistent connection between two Agents, used for real-time exchange of `Contai
 A protobuf message containing all containers running on a node, including their `traefik.sidecar.*` labels, exposed ports, and network settings. Sent by an Agent to all its peers whenever a local container starts, stops, or changes.
 
 ### Cross-node transport
-The TLS connection between two Traefik instances for cross-node routing. By default it forces HTTP/1.1 (`forwardHTTPVersion: true`) to support WebSocket upgrades. Services that need HTTP/2 (e.g. gRPC) must opt in via `traefik.sidecar.service.http2=true`, which selects the `sidecar-internal-h2` transport without `forwardHTTPVersion`.
+The TLS connection between two Traefik instances for cross-node routing. By default it uses HTTP/1.1 (`forwardHTTPVersion: false`), which preserves WebSocket upgrades. Services that need HTTP/2 (e.g. gRPC) must opt in via `traefik.sidecar.service.http2=true`, which selects the `sidecar-internal-h2` transport with `forwardHTTPVersion: true` so the client's HTTP/2 connection is preserved end-to-end.
 
 ### Middleware
 A Traefik middleware definition, configured via `traefik.sidecar.middleware.<name>.<type>.<option>` labels on a container. Middlewares are collected across all containers and written to a global `_middlewares.yml` file. Routers reference them via `traefik.sidecar.router.middlewares`.
