@@ -186,6 +186,7 @@ func TestComputeMyConfigWithRemote(t *testing.T) {
 	assertContains(t, yamlStr, "weight: 1")
 	assertContains(t, yamlStr, "sidecar-internal")
 	assertContains(t, yamlStr, "insecureSkipVerify: true")
+	assertContains(t, yamlStr, "forwardHTTPVersion: true")
 }
 
 func TestComputeMyConfigRemoteOnly(t *testing.T) {
@@ -214,6 +215,7 @@ func TestComputeMyConfigRemoteOnly(t *testing.T) {
 	assertContains(t, yamlStr, "https://192.168.1.20")
 	assertContains(t, yamlStr, "sidecar-internal")
 	assertContains(t, yamlStr, "insecureSkipVerify: true")
+	assertContains(t, yamlStr, "forwardHTTPVersion: true")
 }
 
 func TestComputeMyConfigSidecarDisabled(t *testing.T) {
@@ -287,9 +289,9 @@ func TestComputeMyConfigWithMiddlewareDefinitions(t *testing.T) {
 			ID:   "c2",
 			Name: "mw-provider",
 			Labels: map[string]string{
-				"traefik.sidecar.enable":                                                   "true",
-				"traefik.sidecar.router.rule":                                              "Host(`mw.local`)",
-				"traefik.sidecar.service.port":                                             "80",
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.router.rule":  "Host(`mw.local`)",
+				"traefik.sidecar.service.port": "80",
 				"traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Upgrade":    "websocket",
 				"traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Connection": "Upgrade",
 			},
@@ -315,12 +317,12 @@ func TestComputeMyConfigWithRouterMiddlewares(t *testing.T) {
 			ID:   "c1",
 			Name: "web-app",
 			Labels: map[string]string{
-				"traefik.sidecar.enable":                        "true",
-				"traefik.sidecar.router.rule":                   "Host(`app.local`)",
-				"traefik.sidecar.router.middlewares":             "hermes-ws-headers, auth",
-				"traefik.sidecar.service.port":                  "80",
+				"traefik.sidecar.enable":             "true",
+				"traefik.sidecar.router.rule":        "Host(`app.local`)",
+				"traefik.sidecar.router.middlewares": "hermes-ws-headers, auth",
+				"traefik.sidecar.service.port":       "80",
 				"traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Upgrade": "websocket",
-				"traefik.sidecar.middleware.auth.basicAuth.users": "admin:$2y$10$hash",
+				"traefik.sidecar.middleware.auth.basicAuth.users":                                   "admin:$2y$10$hash",
 			},
 		},
 	})
@@ -342,6 +344,122 @@ func TestComputeMyConfigWithRouterMiddlewares(t *testing.T) {
 	}
 	assertMiddlewareYAML(t, mwYAML, "hermes-ws-headers")
 	assertMiddlewareYAML(t, mwYAML, "auth")
+}
+
+func TestComputeMyConfigRemoteHttp2Enabled(t *testing.T) {
+	a := testAgent(t)
+
+	a.SetLocalContainers([]docker.Container{
+		{
+			ID:   "c1",
+			Name: "grpc-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
+				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.service.http2": "true",
+			},
+		},
+	})
+
+	a.UpdateRemoteContainers("192.168.1.20", []docker.Container{
+		{
+			ID:   "c2",
+			Name: "grpc-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
+				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.service.http2": "true",
+			},
+		},
+	})
+
+	configs := a.ComputeMyConfig()
+
+	yamlStr, ok := configs["grpc-app"]
+	if !ok {
+		t.Fatal("expected config for grpc-app")
+	}
+	assertValidTraefikYAML(t, yamlStr, "grpc-app")
+	assertContains(t, yamlStr, "sidecar-internal-h2")
+	assertContains(t, yamlStr, "insecureSkipVerify: true")
+	if strings.Contains(yamlStr, "forwardHTTPVersion: true") {
+		t.Error("expected no forwardHTTPVersion for HTTP/2 service")
+	}
+}
+
+func TestComputeMyConfigMixedHttpVersions(t *testing.T) {
+	a := testAgent(t)
+
+	a.SetLocalContainers([]docker.Container{
+		{
+			ID:   "c1",
+			Name: "web-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`web.local`)",
+				"traefik.sidecar.service.port": "80",
+			},
+		},
+		{
+			ID:   "c2",
+			Name: "grpc-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
+				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.service.http2": "true",
+			},
+		},
+	})
+
+	a.UpdateRemoteContainers("192.168.1.20", []docker.Container{
+		{
+			ID:   "c3",
+			Name: "web-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`web.local`)",
+				"traefik.sidecar.service.port": "80",
+			},
+		},
+		{
+			ID:   "c4",
+			Name: "grpc-app",
+			Labels: map[string]string{
+				"traefik.sidecar.enable":       "true",
+				"traefik.sidecar.cross-node":   "true",
+				"traefik.sidecar.router.rule":  "Host(`grpc.local`)",
+				"traefik.sidecar.service.port": "50051",
+				"traefik.sidecar.service.http2": "true",
+			},
+		},
+	})
+
+	configs := a.ComputeMyConfig()
+
+	webYAML, ok := configs["web-app"]
+	if !ok {
+		t.Fatal("expected config for web-app")
+	}
+	assertContains(t, webYAML, "sidecar-internal")
+	assertContains(t, webYAML, "forwardHTTPVersion: true")
+
+	grpcYAML, ok := configs["grpc-app"]
+	if !ok {
+		t.Fatal("expected config for grpc-app")
+	}
+	assertContains(t, grpcYAML, "sidecar-internal-h2")
+	assertContains(t, grpcYAML, "insecureSkipVerify: true")
+	if strings.Contains(grpcYAML, "forwardHTTPVersion: true") {
+		t.Error("expected no forwardHTTPVersion for HTTP/2 service")
+	}
 }
 
 func TestComputeMyConfigNoMiddlewares(t *testing.T) {

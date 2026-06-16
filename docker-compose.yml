@@ -76,19 +76,41 @@ services:
       retries: 3
       start_period: 10s
 
-  whoami:
+  # ─── Web service (HTTP/1.1 — default) ─────────────────────
+  # Cross-node transport forces HTTP/1.1 (forwardHTTPVersion: true)
+  # so WebSocket upgrades work through the mesh.
+  # ──────────────────────────────────────────────────────────
+  web-app:
     image: traefik/whoami
-    container_name: whoami
-    hostname: whoami
+    container_name: web-app
+    hostname: web-app
     network_mode: host
     labels:
       - "traefik.sidecar.enable=true"
       - "traefik.sidecar.cross-node=true"
-      - "traefik.sidecar.router.rule=Host(`whoami.local`)"
+      - "traefik.sidecar.router.rule=Host(`web.local`)"
       - "traefik.sidecar.router.entrypoints=websecure"
       - "traefik.sidecar.service.port=80"
 
-  # ─── Middleware example: WebSocket headers ──────────────────
+  # ─── gRPC service (HTTP/2 opt-in) ─────────────────────────
+  # Sets traefik.sidecar.service.http2=true to select the
+  # sidecar-internal-h2 transport, which omits forwardHTTPVersion
+  # and lets HTTP/2 ALPN negotiation proceed naturally.
+  # ──────────────────────────────────────────────────────────
+  grpc-app:
+    image: my-grpc-server
+    container_name: grpc-app
+    hostname: grpc-app
+    network_mode: host
+    labels:
+      - "traefik.sidecar.enable=true"
+      - "traefik.sidecar.cross-node=true"
+      - "traefik.sidecar.router.rule=Host(`grpc.local`)"
+      - "traefik.sidecar.router.entrypoints=websecure"
+      - "traefik.sidecar.service.port=50051"
+      - "traefik.sidecar.service.http2=true"
+
+  # ─── Middleware example ─────────────────────────────────────
   # Define a middleware via labels and reference it in the router.
   # Produces _middlewares.yml (global) + hermes.yml (service).
   # ───────────────────────────────────────────────────────────
@@ -101,10 +123,9 @@ services:
       - "traefik.sidecar.enable=true"
       - "traefik.sidecar.router.rule=Host(`hermes.local`)"
       - "traefik.sidecar.router.entrypoints=websecure"
-      - "traefik.sidecar.router.middlewares=hermes-ws-headers"
+      - "traefik.sidecar.router.middlewares=hermes-cors"
       - "traefik.sidecar.service.port=80"
-      - "traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Upgrade=websocket"
-      - "traefik.sidecar.middleware.hermes-ws-headers.headers.customRequestHeaders.Connection=Upgrade"
+      - "traefik.sidecar.middleware.hermes-cors.headers.customRequestHeaders.X-Forwarded-Proto=https"
 
   # ─── Docker Desktop (Windows/Mac) ──────────────────────────
   # Uncomment and adjust this profile instead of "agent" above.

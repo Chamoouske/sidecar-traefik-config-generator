@@ -15,9 +15,9 @@ type traefikConfig struct {
 }
 
 type httpConfig struct {
-	Routers          map[string]routerConfig          `yaml:"routers,omitempty"`
-	Services         map[string]serviceConfig         `yaml:"services,omitempty"`
-	Middlewares      map[string]map[string]any        `yaml:"middlewares,omitempty"`
+	Routers           map[string]routerConfig           `yaml:"routers,omitempty"`
+	Services          map[string]serviceConfig          `yaml:"services,omitempty"`
+	Middlewares       map[string]map[string]any         `yaml:"middlewares,omitempty"`
 	ServersTransports map[string]serversTransportConfig `yaml:"serversTransports,omitempty"`
 }
 
@@ -36,6 +36,7 @@ type serviceConfig struct {
 
 type serversTransportConfig struct {
 	InsecureSkipVerify bool `yaml:"insecureSkipVerify"`
+	ForwardHTTPVersion bool `yaml:"forwardHTTPVersion,omitempty"`
 }
 
 type loadBalancer struct {
@@ -57,9 +58,10 @@ type weightedService struct {
 }
 
 type backend struct {
-	Name   string
-	URL    string
-	Weight int // 0 means direct (no weighting)
+	Name             string
+	URL              string
+	Weight           int    // 0 means direct (no weighting)
+	ServersTransport string // "" for local, "sidecar-internal" or "sidecar-internal-h2" for remote
 }
 
 func buildRouterConfig(c docker.Container) routerConfig {
@@ -222,10 +224,15 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 				e = &entry{router: rc}
 				services[c.Name] = e
 			}
+			transport := "sidecar-internal"
+			if c.Labels["traefik.sidecar.service.http2"] == "true" {
+				transport = "sidecar-internal-h2"
+			}
 			e.backends = append(e.backends, backend{
-				Name:   c.Name + "-remote-" + peerIP,
-				URL:    buildRemoteURL(peerIP),
-				Weight: 1,
+				Name:             c.Name + "-remote-" + peerIP,
+				URL:              buildRemoteURL(peerIP),
+				Weight:           1,
+				ServersTransport: transport,
 			})
 
 			for k, v := range c.Labels {
@@ -267,8 +274,8 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 			lb := &loadBalancer{
 				Servers: []server{{URL: b.URL}},
 			}
-			if strings.Contains(b.Name, "-remote-") {
-				lb.ServersTransport = "sidecar-internal"
+			if b.ServersTransport != "" {
+				lb.ServersTransport = b.ServersTransport
 			}
 			cfg.HTTP.Services[name] = serviceConfig{
 				LoadBalancer: lb,
@@ -284,8 +291,8 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 				lb := &loadBalancer{
 					Servers: []server{{URL: b.URL}},
 				}
-				if strings.Contains(b.Name, "-remote-") {
-					lb.ServersTransport = "sidecar-internal"
+				if b.ServersTransport != "" {
+					lb.ServersTransport = b.ServersTransport
 				}
 				cfg.HTTP.Services[b.Name] = serviceConfig{
 					LoadBalancer: lb,
@@ -297,9 +304,25 @@ func (a *Agent) ComputeMyConfig() map[string]string {
 		}
 
 		if hasRemote {
-			cfg.HTTP.ServersTransports = map[string]serversTransportConfig{
-				"sidecar-internal": {InsecureSkipVerify: true},
+			needed := make(map[string]bool)
+			for _, b := range e.backends {
+				if b.ServersTransport != "" {
+					needed[b.ServersTransport] = true
+				}
 			}
+			transports := make(map[string]serversTransportConfig, len(needed))
+			if needed["sidecar-internal"] {
+				transports["sidecar-internal"] = serversTransportConfig{
+					InsecureSkipVerify: true,
+					ForwardHTTPVersion: true,
+				}
+			}
+			if needed["sidecar-internal-h2"] {
+				transports["sidecar-internal-h2"] = serversTransportConfig{
+					InsecureSkipVerify: true,
+				}
+			}
+			cfg.HTTP.ServersTransports = transports
 		}
 
 		out, err := yaml.Marshal(cfg)

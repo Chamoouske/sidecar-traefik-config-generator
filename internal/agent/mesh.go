@@ -27,7 +27,7 @@ type MeshManager struct {
 	nodeName   string
 	nodeHostIP string
 
-	mu           sync.RWMutex
+	mu            sync.RWMutex
 	outgoingPeers map[string]*OutgoingPeer
 	incomingPeers map[string]*incomingPeer
 }
